@@ -1,0 +1,57 @@
+# Columbia Shine · App de operación
+
+Aplicación para operar el motolavado: recepción de motos, órdenes, vista del lavador, cobro, caja y turnos, clientes, agenda y reportes.
+
+Es un monorepo con un solo despliegue: Node sirve la API y también la app de Angular ya compilada.
+
+```
+apps/api   Backend Node + Express + TypeScript (API en /api)
+apps/web   Frontend Angular
+db/migrations   SQL de la base de datos (PostgreSQL / Supabase)
+```
+
+## Roles
+
+| Rol | Cómo entra | Qué hace |
+| --- | --- | --- |
+| Propietario | Correo y contraseña | Todo: precios, usuarios, reportes con rentabilidad, anular cobros |
+| Administrador de turno | PIN (o correo y contraseña) | Recibe, asigna, cobra, abre y cierra caja, agenda. Para anular un cobro pide aprobación |
+| Lavador | PIN | Ve solo sus motos; marca inicio y fin del servicio |
+| Cliente | Celular y clave | Agenda su lavado en `/cliente` |
+
+Pago a lavadores: 45 % de cada servicio que lava la persona (valor configurable en la tabla `settings`, clave `commission_pct`). Las propinas se reparten por igual entre quienes lavaron en el turno.
+
+## Despliegue en Railway con Supabase
+
+1. **Supabase**: crea un proyecto. En *Project Settings → Database → Connection string* copia la cadena del **Session pooler** (Railway no tiene salida IPv6, así que la conexión directa no sirve).
+2. **Railway**: *New Project → Deploy from GitHub repo* y elige este repositorio. `railway.json` ya define la compilación (`npm run build`) y el arranque (`npm start`).
+3. En Railway, pestaña *Variables*, define:
+
+   | Variable | Valor |
+   | --- | --- |
+   | `DATABASE_URL` | La cadena del Session pooler de Supabase |
+   | `JWT_SECRET` | Un texto largo y aleatorio |
+   | `OWNER_EMAIL` | Correo del propietario |
+   | `OWNER_PASSWORD` | Contraseña del propietario (mínimo 8 caracteres) |
+   | `OWNER_NAME` | Nombre del propietario |
+   | `NODE_ENV` | `production` |
+
+4. Al arrancar, la app aplica sola las migraciones de `db/migrations` y crea el usuario propietario si no existe.
+5. Entra con el correo del propietario, ve a **Ajustes** y crea al administrador y a los lavadores con su PIN.
+
+Las tablas quedan con RLS activo y sin políticas: solo el backend puede leerlas, no la API pública de Supabase.
+
+## Desarrollo local
+
+```bash
+npm install
+cp .env.example .env          # y ajusta DATABASE_URL
+npm run build
+node --env-file=.env apps/api/dist/main.js    # app completa en http://localhost:3000
+```
+
+Para trabajar el frontend con recarga automática: `npm run dev:web` (usa un proxy hacia la API en el puerto 3000).
+
+## Pendiente para las siguientes fases
+
+Facturación electrónica (Factus), membresías, inventario y consumo de producto, mantenimiento de equipos, avisos por WhatsApp.

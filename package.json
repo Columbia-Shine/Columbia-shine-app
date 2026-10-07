@@ -1,0 +1,19 @@
+{
+  "name": "columbia-shine-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Columbia Shine: operación del motolavado (Angular + Node, un solo despliegue)",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "npm run build -w apps/web && npm run build -w apps/api",
+    "start": "node apps/api/dist/main.js",
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run start -w apps/web",
+    "migrate": "node apps/api/dist/migrate.js"
+  }
+}

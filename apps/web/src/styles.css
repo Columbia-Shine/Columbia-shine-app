@@ -1,0 +1,115 @@
+/* Columbia Shine: identidad de marca */
+:root {
+  --amarillo: #ffd200;
+  --azul: #007bff;
+  --azul-oscuro: #0047a3;
+  --aqua: #0ea5e9;
+  --azul-claro: #7cc4ff;
+  --negro: #111111;
+  --fondo: #0b0f17;
+  --panel: #111827;
+  --gris-oscuro: #1e293b;
+  --gris-medio: #334155;
+  --borde: #475569;
+  --texto: #ffffff;
+  --texto-suave: #cbd5e1;
+  --texto-tenue: #94a3b8;
+  --radio: 14px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: Montserrat, system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1.4;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--azul-claro); text-decoration: none; }
+a:hover { color: #fff; }
+h1 { margin: 0; font-size: 30px; font-weight: 800; font-style: italic; line-height: 1.1; }
+h2 { margin: 0; font-size: 18px; font-weight: 700; }
+p { margin: 0; }
+:focus-visible { outline: 3px solid var(--amarillo); outline-offset: 2px; }
+
+.page { max-width: 1376px; margin: 0 auto; padding: 24px 20px 48px; display: flex; flex-direction: column; gap: 20px; }
+.narrow { max-width: 460px; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.between { justify-content: space-between; }
+.col { display: flex; flex-direction: column; gap: 12px; }
+.grow { flex: 1 1 0; min-width: 0; }
+.split { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.split > .main { flex: 999 1 520px; min-width: 0; }
+.split > .side { flex: 1 1 340px; min-width: 0; }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.grid-sm { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+
+.card { background: var(--panel); border: 1px solid var(--gris-oscuro); border-radius: var(--radio); padding: 20px; }
+.tile { background: var(--gris-oscuro); border-radius: 12px; padding: 14px 16px; }
+.kpi { background: var(--gris-oscuro); border-radius: var(--radio); padding: 18px; }
+.kpi.azul { background: var(--azul-oscuro); }
+.kpi .valor { margin-top: 4px; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .nota, .kpi .rotulo { font-size: 13px; color: var(--texto-suave); }
+.kpi.azul .nota, .kpi.azul .rotulo { color: #dbeafe; }
+
+.rotulo { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--texto-tenue); }
+.suave { color: var(--texto-suave); }
+.chico { font-size: 13px; }
+.num { font-variant-numeric: tabular-nums; }
+.fuerte { font-weight: 700; }
+.amarillo { color: var(--amarillo); }
+.placa { font-size: 22px; font-weight: 700; letter-spacing: 0.06em; }
+.total { font-size: 34px; font-weight: 700; color: var(--amarillo); font-variant-numeric: tabular-nums; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 0 18px; border-radius: 12px; border: 2px solid var(--borde);
+  background: transparent; color: #fff; font-weight: 700; cursor: pointer; text-align: center;
+}
+.btn:hover { border-color: #fff; color: #fff; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.primario { background: var(--amarillo); border-color: var(--amarillo); color: var(--negro); }
+.btn.primario:hover { background: #ffe04d; color: var(--negro); }
+.btn.azul { background: var(--azul-oscuro); border-color: var(--azul-oscuro); }
+.btn.grande { min-height: 60px; font-size: 18px; padding: 0 28px; }
+.btn.chico { min-height: 44px; padding: 0 14px; font-size: 14px; }
+.btn.bloque { width: 100%; }
+
+.opcion {
+  min-height: 56px; padding: 10px 14px; border-radius: 12px; border: 2px solid var(--gris-medio);
+  background: var(--gris-oscuro); color: #fff; font-weight: 700; cursor: pointer; text-align: left;
+}
+.opcion[aria-pressed='true'] { border-color: var(--amarillo); background: var(--azul-oscuro); }
+.opcion:disabled { opacity: 0.4; cursor: not-allowed; text-decoration: line-through; }
+.pastilla { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 2px solid var(--borde); background: transparent; color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; }
+.pastilla[aria-pressed='true'] { border-color: var(--amarillo); background: var(--azul-oscuro); }
+
+.etiqueta { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--gris-medio); color: #fff; white-space: nowrap; }
+.etiqueta.amarilla { background: var(--amarillo); color: var(--negro); }
+.etiqueta.azul { background: var(--azul-oscuro); }
+.etiqueta.aqua { background: var(--aqua); color: var(--negro); }
+
+label { display: block; font-size: 13px; color: var(--texto-suave); margin-bottom: 6px; }
+.campo { width: 100%; min-height: 50px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--borde); background: var(--fondo); color: #fff; }
+.campo:focus { border-color: var(--azul); }
+.campo.grande { min-height: 64px; font-size: 26px; font-weight: 700; border: 2px solid var(--azul); }
+select.campo { appearance: auto; }
+
+.tabla-caja { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+th { padding: 8px 8px 8px 0; text-align: left; font-weight: 600; color: var(--texto-suave); white-space: nowrap; }
+td { padding: 12px 8px 12px 0; border-top: 1px solid var(--gris-medio); }
+.der { text-align: right; }
+th.der, td.der { padding-right: 0; padding-left: 8px; }
+
+.aviso { padding: 12px 16px; border-radius: 12px; background: var(--gris-oscuro); }
+.aviso.alerta { background: var(--amarillo); color: var(--negro); font-weight: 600; }
+.vacio { padding: 28px 16px; text-align: center; color: var(--texto-suave); border: 1px dashed var(--gris-medio); border-radius: 12px; }
+.barra { height: 8px; border-radius: 4px; background: var(--gris-oscuro); }
+.barra > div { height: 8px; border-radius: 4px; background: var(--aqua); }
+.fotos { display: flex; flex-wrap: wrap; gap: 10px; }
+.fotos img { width: 120px; height: 90px; object-fit: cover; border-radius: 10px; }
+.sep { border-top: 1px solid var(--gris-medio); padding-top: 12px; }
