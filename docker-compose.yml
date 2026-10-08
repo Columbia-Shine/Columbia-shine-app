@@ -1,0 +1,23 @@
+# Base de datos para pruebas locales. En producción se usa Supabase.
+# Puerto 5433 para no chocar con un PostgreSQL instalado en el equipo.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: columbia-shine-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: columbia_shine
+      TZ: America/Bogota
+    ports:
+      - "5433:5432"
+    volumes:
+      - columbia-shine-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d columbia_shine"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  columbia-shine-data:

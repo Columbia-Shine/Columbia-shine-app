@@ -43,14 +43,21 @@ Las tablas quedan con RLS activo y sin políticas: solo el backend puede leerlas
 
 ## Desarrollo local
 
+Necesitas Node 22.12 o superior y Docker Desktop.
+
 ```bash
 npm install
-cp .env.example .env          # y ajusta DATABASE_URL
+cp .env.example .env          # y pon DATABASE_URL=postgresql://postgres:postgres@localhost:5433/columbia_shine
+npm run db:up                 # PostgreSQL local en Docker, puerto 5433
 npm run build
-node --env-file=.env apps/api/dist/main.js    # app completa en http://localhost:3000
+npm run start:local           # app completa en http://localhost:3000
 ```
 
-Para trabajar el frontend con recarga automática: `npm run dev:web` (usa un proxy hacia la API en el puerto 3000).
+La primera vez que arranca aplica las migraciones y crea el propietario con los datos del `.env`.
+
+Para trabajar con recarga automática, en dos terminales: `npm run dev:api` (API en el puerto 3000) y `npm run dev:web` (Angular en http://localhost:4200, con proxy hacia la API).
+
+Para borrar la base local y empezar de cero: `docker compose down -v` y luego `npm run db:up`.
 
 ## Pendiente para las siguientes fases
 

@@ -10,10 +10,13 @@
     "node": ">=22.12"
   },
   "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
     "build": "npm run build -w apps/web && npm run build -w apps/api",
     "start": "node apps/api/dist/main.js",
     "dev:api": "npm run dev -w apps/api",
     "dev:web": "npm run start -w apps/web",
-    "migrate": "node apps/api/dist/migrate.js"
+    "migrate": "node apps/api/dist/migrate.js",
+    "start:local": "node --env-file=.env apps/api/dist/main.js"
   }
 }
