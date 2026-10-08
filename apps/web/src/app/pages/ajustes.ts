@@ -6,7 +6,6 @@ const PERMISSIONS: [string, string, string, string][] = [
   ['Recibir moto y crear orden', 'Sí', 'Sí', 'No'],
   ['Asignar y reasignar lavador', 'Sí', 'Sí', 'No'],
   ['Marcar inicio y fin del servicio', 'Sí', 'Sí', 'Sí, las suyas'],
-  ['Aprobar la revisión de entrega', 'Sí', 'Sí', 'No'],
   ['Cobrar y entregar', 'Sí', 'Sí', 'No'],
   ['Borrar o anular un cobro', 'Sí', 'Pide aprobación', 'No'],
   ['Abrir y cerrar caja, registrar gastos', 'Sí', 'Sí', 'No'],

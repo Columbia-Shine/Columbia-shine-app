@@ -32,8 +32,8 @@ type Alert = { tag: string; tone: string; title: string; detail: string; action:
           </div>
           <div class="kpi">
             <div class="rotulo">En proceso ahora</div>
-            <div class="valor">{{ count('WAITING') + count('WASHING') + count('REVIEW') }}</div>
-            <div class="nota">{{ count('WAITING') }} en espera · {{ count('WASHING') }} en lavado · {{ count('REVIEW') }} en revisión</div>
+            <div class="valor">{{ count('WAITING') + count('WASHING') }}</div>
+            <div class="nota">{{ count('WAITING') }} en espera · {{ count('WASHING') }} en lavado</div>
           </div>
           <div class="kpi">
             <div class="rotulo">Listas para entregar</div>
@@ -136,8 +136,6 @@ export class Inicio implements OnDestroy {
         out.push({ tag: 'Demorada', tone: 'amarilla', title: bike, detail: `Lleva ${o.minutes} min en lavado. El tiempo objetivo es ${o.max_minutes} min.`, action: 'Ver orden', link: '/ordenes/' + o.id });
       } else if (o.status === 'READY') {
         out.push({ tag: 'Por cobrar', tone: 'aqua', title: bike, detail: `Lista hace ${o.ready_minutes ?? 0} min. Total ${this.fmt(o.total)}.`, action: 'Cobrar', link: '/cobro/' + o.id });
-      } else if (o.status === 'REVIEW') {
-        out.push({ tag: 'Por revisar', tone: 'azul', title: bike, detail: 'El lavador terminó. Falta la revisión de entrega.', action: 'Revisar', link: '/ordenes/' + o.id });
       } else if (o.status === 'WAITING' && !o.washer_id) {
         out.push({ tag: 'Sin asignar', tone: '', title: bike, detail: `En espera hace ${o.minutes} min.`, action: 'Asignar', link: '/ordenes/' + o.id });
       }

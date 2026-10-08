@@ -203,18 +203,19 @@ ordenes.post('/orders/:id/assign', auth(...MANAGERS), async (req, res) => {
 ordenes.post('/orders/:id/status', auth(...STAFF), async (req, res) => {
   const o = await loadOrder(String(req.params.id));
   const to = String(req.body?.status);
-  need(['WAITING', 'WASHING', 'REVIEW', 'READY'].includes(to), 'Estado no válido.');
+  // Sin revisión de entrega: al terminar el lavado la moto queda lista para entregar
+  need(['WAITING', 'WASHING', 'READY'].includes(to), 'Estado no válido.');
   need(['WAITING', 'WASHING', 'REVIEW', 'READY'].includes(o.status), 'Esta orden ya está cerrada.');
   if (req.user.role === 'WASHER') {
     need(o.washer_id === req.user.id, 'Esta moto no está asignada a ti.', 403);
-    const allowed = (o.status === 'WAITING' && to === 'WASHING') || (o.status === 'WASHING' && to === 'REVIEW');
+    const allowed = (o.status === 'WAITING' && to === 'WASHING') || (o.status === 'WASHING' && to === 'READY');
     need(allowed, 'Ese cambio lo hace el administrador.', 403);
   }
   need(to === 'WAITING' || o.washer_id, 'Primero asigna un lavador.');
   await q(
     `update orders set status = $2,
        started_at = case when $2 = 'WASHING' then coalesce(started_at, now()) else started_at end,
-       finished_at = case when $2 = 'REVIEW' then now() when $2 = 'READY' then coalesce(finished_at, now()) else finished_at end,
+       finished_at = case when $2 = 'READY' then coalesce(finished_at, now()) else finished_at end,
        ready_at = case when $2 = 'READY' then now() else ready_at end
      where id = $1`,
     [o.id, to],

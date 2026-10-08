@@ -27,14 +27,7 @@ import { Api, minutesSince, Session, Toast } from '../core';
           <div class="aviso"><div class="fuerte amarillo">Ojo al recibir</div><div>{{ o.notes }}</div></div>
         }
 
-        <section class="col" style="gap: 6px">
-          <p class="rotulo">Pasos del servicio</p>
-          @for (s of o.steps; track $index) {
-            <label class="paso"><input type="checkbox" [checked]="steps()[$index]" (change)="toggle($index)" /> <span>{{ s }}</span></label>
-          }
-        </section>
-
-        <button class="btn primario grande" [disabled]="busy()" (click)="move(o, 'REVIEW')">Terminé: pasar a revisión</button>
+        <button class="btn primario grande" [disabled]="busy()" (click)="move(o, 'READY')">Terminé: lista para entregar</button>
         <p class="chico suave">Si el cliente pide algo adicional o encuentras un daño, avísale al administrador antes de hacerlo.</p>
       } @else {
         <p class="vacio">No tienes una moto en lavado.</p>
@@ -60,8 +53,6 @@ import { Api, minutesSince, Session, Toast } from '../core';
   styles: `
     .actual { padding: 16px; border-radius: 16px; background: var(--azul-oscuro); gap: 8px; }
     .servicio { font-size: 18px; font-weight: 800; font-style: italic; color: var(--amarillo); }
-    .paso { display: flex; align-items: center; gap: 12px; min-height: 48px; margin: 0; padding: 0 12px; border: 1px solid var(--gris-medio); border-radius: 10px; font-size: 15px; font-weight: 600; color: #fff; cursor: pointer; }
-    .paso input { width: 22px; height: 22px; accent-color: var(--amarillo); flex: 0 0 auto; }
   `,
 })
 export class Lavador implements OnDestroy {
@@ -71,7 +62,6 @@ export class Lavador implements OnDestroy {
 
   protected orders = signal<any[]>([]);
   protected busy = signal(false);
-  protected steps = signal<boolean[]>([]);
   private tick = signal(0);
   private timer = setInterval(() => {
     this.tick.update((t) => t + 1);
@@ -80,7 +70,7 @@ export class Lavador implements OnDestroy {
 
   protected current = computed(() => this.orders().find((o) => o.status === 'WASHING'));
   protected waiting = computed(() => this.orders().filter((o) => o.status === 'WAITING'));
-  protected done = computed(() => this.orders().filter((o) => ['REVIEW', 'READY', 'DELIVERED'].includes(o.status)));
+  protected done = computed(() => this.orders().filter((o) => ['READY', 'DELIVERED'].includes(o.status)));
   protected minutes = computed(() => {
     this.tick();
     return minutesSince(this.current()?.started_at);
@@ -97,14 +87,6 @@ export class Lavador implements OnDestroy {
 
   title = (o: any): string => o.items.map((i: any) => i.name).join(' + ');
 
-  toggle(i: number) {
-    this.steps.update((s) => {
-      const next = [...s];
-      next[i] = !next[i];
-      return next;
-    });
-  }
-
   private load() {
     this.api.get('/orders?scope=mine').then((o) => this.orders.set(o), this.toast.fail);
   }
@@ -113,8 +95,7 @@ export class Lavador implements OnDestroy {
     this.busy.set(true);
     try {
       await this.api.post(`/orders/${o.id}/status`, { status });
-      this.steps.set([]);
-      this.toast.show(status === 'WASHING' ? 'Lavado iniciado.' : 'Listo: pasó a revisión.');
+      this.toast.show(status === 'WASHING' ? 'Lavado iniciado.' : 'Listo: quedó para entregar.');
       this.load();
     } catch (e) {
       this.toast.fail(e);

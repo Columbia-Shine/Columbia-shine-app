@@ -2,7 +2,7 @@ import { Component, computed, inject, OnDestroy, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Api, minutesSince, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../core';
 
-const COLUMNS = ['WAITING', 'WASHING', 'REVIEW', 'READY'];
+const COLUMNS = ['WAITING', 'WASHING', 'READY'];
 
 @Component({
   selector: 'app-ordenes',
@@ -42,7 +42,6 @@ const COLUMNS = ['WAITING', 'WASHING', 'REVIEW', 'READY'];
                       @switch (action(o)) {
                         @case ('assign') { <a class="btn chico" [routerLink]="['/ordenes', o.id]">Asignar</a> }
                         @case ('start') { <button class="btn chico" (click)="move(o, 'WASHING')">Iniciar</button> }
-                        @case ('review') { <a class="btn chico azul" [routerLink]="['/ordenes', o.id]">Revisar</a> }
                         @case ('pay') { <a class="btn chico primario" [routerLink]="['/cobro', o.id]">Cobrar {{ o.total | money }}</a> }
                         @default { <a class="btn chico" [routerLink]="['/ordenes', o.id]">Ver</a> }
                       }
@@ -55,7 +54,7 @@ const COLUMNS = ['WAITING', 'WASHING', 'REVIEW', 'READY'];
             }
           </div>
         </div>
-        <p class="chico suave">El tiempo se pone amarillo cuando la moto supera el tiempo objetivo de su servicio. Para pasar a "Lista para entregar" se completa la revisión de entrega dentro de la orden.</p>
+        <p class="chico suave">El tiempo se pone amarillo cuando la moto supera el tiempo objetivo de su servicio.</p>
       } @else {
         <section class="card tabla-caja">
           <table>
@@ -127,14 +126,13 @@ export class Ordenes implements OnDestroy {
   elapsed(o: any): string {
     if (o.status === 'WASHING') return this.washMinutes(o) + ' min';
     if (o.status === 'READY') return 'hace ' + minutesSince(o.ready_at) + ' min';
-    return minutesSince(o.status === 'REVIEW' ? o.finished_at : o.created_at) + ' min';
+    return minutesSince(o.created_at) + ' min';
   }
 
   extras = (o: any): string => o.items.filter((i: any) => i.kind === 'EXTRA').map((i: any) => i.name).join(', ');
 
   action(o: any): string {
     if (o.status === 'WAITING') return o.washer_id ? 'start' : 'assign';
-    if (o.status === 'REVIEW') return 'review';
     if (o.status === 'READY') return 'pay';
     return 'view';
   }

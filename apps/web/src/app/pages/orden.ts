@@ -3,17 +3,6 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Api, METHOD_NAMES, minutesSince, money, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../core';
 
-/** Estándar de entrega del manual interno. */
-const CHECKLIST = [
-  'Carrocería y tanque: sin espuma ni residuos, secos',
-  'Rines: limpios, sin acumulación de producto',
-  'Llantas: limpias; restaurador solo en zonas seguras',
-  'Plásticos: uniformes y sin exceso de producto',
-  'Motor: sin residuos de desengrasante ni exceso de agua',
-  'Cadena: limpia, seca y lubricada (si se cobró el adicional)',
-  'Espejos y vidrios: limpios y sin marcas',
-];
-
 @Component({
   selector: 'app-orden',
   imports: [FormsModule, RouterLink, MoneyPipe, WhenPipe],
@@ -44,17 +33,7 @@ const CHECKLIST = [
                   }
                   @case ('WASHING') {
                     <p class="suave">En lavado hace {{ since(o.started_at) }} min. Tiempo objetivo: {{ o.min_minutes }}–{{ o.max_minutes }} min.</p>
-                    <button class="btn primario" [disabled]="busy()" (click)="move('REVIEW')">Terminó: pasar a revisión</button>
-                  }
-                  @case ('REVIEW') {
-                    <p class="suave">Revisa la moto con el estándar de entrega antes de avisar al cliente.</p>
-                    @for (c of checklist; track $index) {
-                      <label class="check"><input type="checkbox" [checked]="checked()[$index]" (change)="toggleCheck($index)" /> <span>{{ c }}</span></label>
-                    }
-                    <div class="row">
-                      <button class="btn primario" [disabled]="!allChecked() || busy()" (click)="move('READY')">Lista para entregar</button>
-                      <button class="btn" [disabled]="busy()" (click)="move('WASHING')">Devolver a lavado</button>
-                    </div>
+                    <button class="btn primario" [disabled]="busy()" (click)="move('READY')">Terminó: lista para entregar</button>
                   }
                   @case ('READY') {
                     <p class="suave">Lista hace {{ since(o.ready_at) }} min.</p>
@@ -143,10 +122,6 @@ const CHECKLIST = [
       }
     </main>
   `,
-  styles: `
-    .check { display: flex; align-items: center; gap: 12px; min-height: 44px; margin: 0; font-size: 15px; color: #fff; cursor: pointer; }
-    .check input { width: 22px; height: 22px; accent-color: var(--amarillo); flex: 0 0 auto; }
-  `,
 })
 export class Orden {
   private api = inject(Api);
@@ -155,13 +130,11 @@ export class Orden {
   private id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
 
   protected names = STATUS_NAMES;
-  protected checklist = CHECKLIST;
   protected since = minutesSince;
   protected order = signal<any | null>(null);
   protected washers = signal<any[]>([]);
   protected services = signal<any[]>([]);
   protected busy = signal(false);
-  protected checked = signal<boolean[]>(CHECKLIST.map(() => false));
   protected cancelReason = signal('');
   protected extraId = signal('');
   protected extraPrice = signal<number | null>(null);
@@ -170,7 +143,6 @@ export class Orden {
   protected editable = computed(() => this.open() && !this.order()?.payment_id);
   protected extras = computed(() => this.services().filter((s) => s.kind === 'EXTRA'));
   protected extra = computed(() => this.extras().find((e) => e.id === this.extraId()));
-  protected allChecked = computed(() => this.checked().every(Boolean));
 
   constructor() {
     this.load();
@@ -182,10 +154,6 @@ export class Orden {
 
   private load() {
     this.api.get('/orders/' + this.id).then((o) => this.order.set(o), this.toast.fail);
-  }
-
-  toggleCheck(i: number) {
-    this.checked.update((c) => c.map((v, j) => (j === i ? !v : v)));
   }
 
   /** Ejecuta una acción sobre la orden y refresca lo que se ve en pantalla. */
@@ -292,7 +260,7 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
           } @else {
             <section class="card main col">
               <p>Esta orden está en "{{ status[o.status] }}".</p>
-              <p class="suave">{{ o.status === 'DELIVERED' ? 'Ya fue cobrada y entregada.' : 'Solo se cobra cuando la moto pasa la revisión y queda lista para entregar.' }}</p>
+              <p class="suave">{{ o.status === 'DELIVERED' ? 'Ya fue cobrada y entregada.' : 'Solo se cobra cuando la moto está lista para entregar.' }}</p>
               <a class="btn" [routerLink]="['/ordenes', o.id]">Ir a la orden</a>
             </section>
           }
