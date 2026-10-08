@@ -91,13 +91,6 @@ abstract class Booker {
   }
 }
 
-const PICKER_STYLES = `
-  .dias { display: grid; grid-auto-flow: column; grid-auto-columns: 72px; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-  .dia { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60px; padding: 4px; text-align: center; text-transform: capitalize; }
-  .horas { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
-  .hora { text-align: center; min-height: 48px; padding: 4px; }
-`;
-
 /** El cliente registrado agenda su lavado desde el celular. */
 @Component({
   selector: 'app-agendar',
@@ -145,18 +138,18 @@ const PICKER_STYLES = `
         </div>
 
         <p class="rotulo">Día</p>
-        <div class="dias">
+        <div class="cupo-dias">
           @for (d of days; track d.id) {
-            <button class="opcion dia" [attr.aria-pressed]="day() === d.id" (click)="pickDay(d.id)">
+            <button class="opcion cupo-dia" [attr.aria-pressed]="day() === d.id" (click)="pickDay(d.id)">
               <span class="chico suave">{{ d.wd }}</span><span>{{ d.rest }}</span>
             </button>
           }
         </div>
 
         <p class="rotulo">Hora</p>
-        <div class="horas">
+        <div class="cupo-horas">
           @for (s of slots(); track s.time) {
-            <button class="opcion hora num" [attr.aria-pressed]="time() === s.time" [disabled]="s.free === 0" (click)="time.set(s.time)">{{ hourLabel(s.time) }}</button>
+            <button class="opcion cupo-hora num" [attr.aria-pressed]="time() === s.time" [disabled]="s.free === 0" (click)="time.set(s.time)">{{ hourLabel(s.time) }}</button>
           }
         </div>
         <p class="chico suave">Las horas tachadas ya están ocupadas o ya pasaron.</p>
@@ -169,7 +162,6 @@ const PICKER_STYLES = `
       </section>
     </main>
   `,
-  styles: PICKER_STYLES,
 })
 export class Agendar extends Booker {
   private session = inject(Session);
@@ -249,17 +241,17 @@ export class Agendar extends Booker {
             </select>
           </div>
           <p class="rotulo">Día</p>
-          <div class="dias">
+          <div class="cupo-dias">
             @for (d of days; track d.id) {
-              <button class="opcion dia" [attr.aria-pressed]="day() === d.id" (click)="pickDay(d.id)">
+              <button class="opcion cupo-dia" [attr.aria-pressed]="day() === d.id" (click)="pickDay(d.id)">
                 <span class="chico suave">{{ d.wd }}</span><span>{{ d.rest }}</span>
               </button>
             }
           </div>
           <p class="rotulo">Hora</p>
-          <div class="horas">
+          <div class="cupo-horas">
             @for (s of slots(); track s.time) {
-              <button class="opcion hora num" [attr.aria-pressed]="time() === s.time" [disabled]="s.free === 0" (click)="time.set(s.time)">
+              <button class="opcion cupo-hora num" [attr.aria-pressed]="time() === s.time" [disabled]="s.free === 0" (click)="time.set(s.time)">
                 {{ hourLabel(s.time) }}<br /><span class="chico suave">{{ s.free }} cupo(s)</span>
               </button>
             }
@@ -269,7 +261,6 @@ export class Agendar extends Booker {
       </div>
     </main>
   `,
-  styles: PICKER_STYLES,
 })
 export class Agenda extends Booker {
   protected customerName = signal('');
