@@ -95,12 +95,14 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 
 ## Servicios (del manual interno)
 
+Precios vigentes en producción (octubre 2026). Las migraciones siembran los precios originales; en producción se cambian desde Ajustes.
+
 | Servicio | Precio | Tiempo objetivo | Costo directo |
 | --- | --- | --- | --- |
 | Shine Basic | $16.000 | 20–25 min | $5.600 |
-| Shine Premium | $25.000 | 30–40 min | $8.900 |
-| Shine Detail (recomendado) | $35.000 | 60–75 min | $17.100 |
-| Shine Full | $50.000 | 120–150 min | $30.200 |
+| Shine Premium | $26.000 | 30–40 min | $8.900 |
+| Shine Detail (recomendado) | $40.000 | 60–75 min | $17.100 |
+| Shine Full | $60.000 | 120–150 min | $30.200 |
 
 Adicionales: detallado de motor $15.000, cadena $12.000, cera porcelanizadora $10.000, llantas $7.000, plásticos $8.000, óxido desde $10.000, desmanchado desde $10.000.
 
