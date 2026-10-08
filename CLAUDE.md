@@ -13,7 +13,7 @@ apps/api/            Node 22 + Express 5 + TypeScript (CommonJS), SQL directo co
   src/main.ts        Arranque: migraciones, crea el propietario, sirve /api y el Angular compilado
   src/db.ts          Pool, q(), one(), tx(), audit(), setting(), migrate(), TODAY, localDate()
   src/auth.ts        JWT, middleware auth(...roles), HttpError, need(), validadores int/text/optText
-  src/routes-cuentas.ts    Ingreso (PIN, correo, cliente), usuarios, servicios y precios, auditoría
+  src/routes-cuentas.ts    Ingreso (usuario o correo y contraseña), usuarios, servicios y precios, auditoría
   src/routes-ordenes.ts    Clientes, motos, órdenes, adicionales, cobros y anulaciones
   src/routes-operacion.ts  Caja y turnos, inicio (dashboard), agenda, reportes
 apps/web/            Angular 21, componentes standalone, sin zone.js (todo el estado en signals)
@@ -22,7 +22,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql, 002_usuarios.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -49,7 +49,7 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL. Local: `postgresql://postgres:postgres@localhost:5433/columbia_shine` (sin SSL). En producción: Supabase, cadena del **Session pooler** (Railway no tiene IPv6) |
 | `JWT_SECRET` | Obligatoria en producción |
-| `OWNER_EMAIL`, `OWNER_PASSWORD`, `OWNER_NAME` | Crean el propietario la primera vez que arranca |
+| `OWNER_USERNAME`, `OWNER_PASSWORD`, `OWNER_NAME` | Crean el propietario la primera vez que arranca. `OWNER_EMAIL` es opcional |
 | `PORT` | Railway la define sola |
 | `NODE_ENV` | `production` en Railway |
 
@@ -57,12 +57,17 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 
 | Rol | Ingreso | Puede |
 | --- | --- | --- |
-| `OWNER` propietario | Correo y contraseña | Todo. Precios, usuarios, rentabilidad, anular cobros directamente |
-| `ADMIN` administrador de turno | PIN de 4 dígitos (o correo) | Recibir, asignar, revisar, cobrar, caja, agenda, reporte del día. **No** borra ni anula cobros: pide aprobación |
-| `WASHER` lavador | PIN | Solo sus motos: iniciar y terminar (queda lista para entregar). Nunca ve cifras del negocio |
-| `CLIENT` cliente | Celular y clave | Agendar y cancelar sus reservas, registrar sus motos |
+| `OWNER` propietario | Usuario y contraseña en `/ingreso` | Todo. Precios, usuarios, rentabilidad, anular cobros directamente |
+| `ADMIN` administrador de turno | Usuario y contraseña en `/ingreso` | Recibir, asignar, cobrar, caja, agenda, reporte del día. **No** borra ni anula cobros: pide aprobación |
+| `WASHER` lavador | Usuario y contraseña en `/ingreso` | Solo sus motos: iniciar y terminar (queda lista para entregar). Nunca ve cifras del negocio |
+| `CLIENT` cliente | Usuario o correo y clave en `/cliente` | Agendar y cancelar sus reservas, registrar sus motos |
 
-Bloqueo de 15 minutos tras 5 intentos fallidos de PIN o clave.
+- `/auth/login` recibe `{ login, password, staff }`: `login` es el usuario o el correo (sin importar mayúsculas). Con `staff: true` solo entra el equipo; sin él, solo clientes.
+- El usuario (`users.username`) es único en minúsculas: 3 a 30 caracteres `a-z 0-9 . _ -`. Lo valida `username()` de `auth.ts`.
+- Contraseña mínima: 8 caracteres para el equipo, 6 para clientes. El propietario crea al equipo y le cambia usuario o contraseña en Ajustes.
+- El registro de clientes pide nombre, usuario, celular (para contactarlo) y correo opcional.
+- El PIN ya no se usa (la columna `pin_hash` quedó sin uso).
+- Bloqueo de 15 minutos tras 5 intentos fallidos.
 
 ## Flujo de una orden
 

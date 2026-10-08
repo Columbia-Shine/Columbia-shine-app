@@ -39,21 +39,22 @@ const ACTIONS: Record<string, string> = {
                 <div class="row between">
                   <div>
                     <div class="fuerte">{{ u.name }} @if (!u.active) { (inactivo) }</div>
-                    <div class="chico suave">{{ u.email || 'Sin correo' }} · {{ u.has_pin ? 'con PIN' : 'sin PIN' }}</div>
+                    <div class="chico suave">Usuario: {{ u.username || 'sin usuario' }}@if (u.email) { · {{ u.email }} }</div>
                   </div>
                   <span class="etiqueta" [class.amarilla]="u.role === 'OWNER'" [class.azul]="u.role === 'ADMIN'">{{ roles[u.role] }}</span>
                 </div>
                 <div class="row">
-                  <button class="btn chico" (click)="editing.set(editing() === u.id ? '' : u.id); newPin.set('')">Cambiar PIN</button>
+                  <button class="btn chico" (click)="edit(u)">Cambiar usuario o contraseña</button>
                   @if (u.role !== 'OWNER') {
                     <button class="btn chico" (click)="patch(u, { role: u.role === 'ADMIN' ? 'WASHER' : 'ADMIN' }, 'Rol actualizado.')">Pasar a {{ u.role === 'ADMIN' ? 'lavador' : 'administrador' }}</button>
                     <button class="btn chico" (click)="patch(u, { active: !u.active }, u.active ? 'Usuario desactivado.' : 'Usuario activado.')">{{ u.active ? 'Desactivar' : 'Activar' }}</button>
                   }
                 </div>
                 @if (editing() === u.id) {
-                  <div class="row">
-                    <input class="campo" style="width: 150px" inputmode="numeric" maxlength="4" placeholder="Nuevo PIN" aria-label="Nuevo PIN de 4 dígitos" [(ngModel)]="newPin" />
-                    <button class="btn chico azul" (click)="patch(u, { pin: newPin() }, 'PIN actualizado.')">Guardar PIN</button>
+                  <div class="col" style="gap: 8px">
+                    <div><label [for]="'eu' + u.id">Usuario</label><input [id]="'eu' + u.id" class="campo" autocapitalize="none" autocomplete="off" [(ngModel)]="newUsername" /></div>
+                    <div><label [for]="'ep' + u.id">Nueva contraseña (vacía para no cambiarla)</label><input [id]="'ep' + u.id" class="campo" type="password" autocomplete="new-password" [(ngModel)]="newPassword" /></div>
+                    <button class="btn chico azul" (click)="saveAccess(u)">Guardar</button>
                   </div>
                 }
               </div>
@@ -67,12 +68,9 @@ const ACTIONS: Record<string, string> = {
               <button class="pastilla" [attr.aria-pressed]="role() === 'WASHER'" (click)="role.set('WASHER')">Lavador</button>
               <button class="pastilla" [attr.aria-pressed]="role() === 'ADMIN'" (click)="role.set('ADMIN')">Administrador de turno</button>
             </div>
-            <div><label for="up">PIN de 4 dígitos</label><input id="up" class="campo" inputmode="numeric" maxlength="4" [(ngModel)]="pin" autocomplete="off" /></div>
-            @if (role() === 'ADMIN') {
-              <p class="chico suave">Opcional: correo y contraseña para que entre desde otro equipo, además del PIN.</p>
-              <div><label for="ue">Correo</label><input id="ue" class="campo" type="email" [(ngModel)]="email" autocomplete="off" /></div>
-              <div><label for="uc">Contraseña (mínimo 8 caracteres)</label><input id="uc" class="campo" type="password" [(ngModel)]="password" autocomplete="new-password" /></div>
-            }
+            <div><label for="uu">Usuario para entrar</label><input id="uu" class="campo" autocapitalize="none" spellcheck="false" placeholder="ej. gregorio" [(ngModel)]="username" autocomplete="off" /></div>
+            <div><label for="uc">Contraseña (mínimo 8 caracteres)</label><input id="uc" class="campo" type="password" [(ngModel)]="password" autocomplete="new-password" /></div>
+            <div><label for="ue">Correo (opcional)</label><input id="ue" class="campo" type="email" [(ngModel)]="email" autocomplete="off" /></div>
             <button class="btn primario" (click)="create()">Crear usuario</button>
           </section>
         </div>
@@ -158,10 +156,11 @@ export class Ajustes {
   protected services = signal<any[]>([]);
   protected audit = signal<any[]>([]);
   protected editing = signal('');
-  protected newPin = signal('');
+  protected newUsername = signal('');
+  protected newPassword = signal('');
   protected name = signal('');
   protected role = signal<'WASHER' | 'ADMIN'>('WASHER');
-  protected pin = signal('');
+  protected username = signal('');
   protected email = signal('');
   protected password = signal('');
   protected priceOf = signal('');
@@ -207,11 +206,25 @@ export class Ajustes {
     }, done);
   }
 
+  edit(u: any) {
+    this.editing.set(this.editing() === u.id ? '' : u.id);
+    this.newUsername.set(u.username ?? '');
+    this.newPassword.set('');
+  }
+
+  saveAccess(u: any) {
+    const body: Record<string, string> = {};
+    if (this.newUsername().trim() !== (u.username ?? '')) body['username'] = this.newUsername();
+    if (this.newPassword()) body['password'] = this.newPassword();
+    if (!Object.keys(body).length) return this.toast.show('No hay cambios.', true);
+    this.patch(u, body, 'Acceso actualizado.');
+  }
+
   create() {
     this.run(async () => {
-      await this.api.post('/users', { name: this.name(), role: this.role(), pin: this.pin(), email: this.email(), password: this.password() });
+      await this.api.post('/users', { name: this.name(), role: this.role(), username: this.username(), email: this.email(), password: this.password() });
       this.name.set('');
-      this.pin.set('');
+      this.username.set('');
       this.email.set('');
       this.password.set('');
     }, 'Usuario creado.');

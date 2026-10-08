@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { audit, one, q, tx } from './db';
-import { auth, HttpError, int, need, normPhone, optText, sign, text } from './auth';
+import { auth, HttpError, int, need, normPhone, optText, sign, text, username } from './auth';
 
 export const cuentas = Router();
 
@@ -32,44 +32,52 @@ const session = (u: any) => {
   return { token: sign(user), user };
 };
 
-// Lista para la pantalla de PIN de la tablet del local
-cuentas.get('/auth/staff', async (_req, res) => {
-  res.json(await q(`select id, name, role from users where active and pin_hash is not null and role <> 'CLIENT' order by role, name`));
-});
+const MIN_STAFF_PASSWORD = 8;
+const MIN_CLIENT_PASSWORD = 6;
 
+// Todos entran con usuario (o correo) y contraseña: el equipo por /ingreso, los clientes por /cliente
 cuentas.post('/auth/login', async (req, res) => {
-  const { email, password, userId, pin, phone } = req.body ?? {};
-  let user: any;
-  if (userId) {
-    user = await one(`select * from users where id = $1 and active and role <> 'CLIENT'`, [String(userId)]);
-    need(user, 'Los datos no coinciden.', 401);
-    await checkSecret(user, String(pin ?? ''), user.pin_hash);
-  } else if (email) {
-    user = await one(`select * from users where lower(email) = lower($1) and active`, [String(email).trim()]);
-    need(user, 'Los datos no coinciden.', 401);
-    await checkSecret(user, String(password ?? ''), user.password_hash);
-  } else {
-    user = await one(`select * from users where phone = $1 and active and role = 'CLIENT'`, [normPhone(phone)]);
-    need(user, 'Los datos no coinciden.', 401);
-    await checkSecret(user, String(password ?? ''), user.password_hash);
-  }
+  const login = String(req.body?.login ?? '').trim().toLowerCase();
+  need(login, 'Escribe tu usuario o correo.');
+  const user = await one(
+    `select * from users where active and (lower(username) = $1 or lower(email) = $1) and (role = 'CLIENT') = $2`,
+    [login, req.body?.staff !== true],
+  );
+  need(user, 'Los datos no coinciden.', 401);
+  await checkSecret(user, String(req.body?.password ?? ''), user.password_hash);
   res.json(session(user));
 });
+
+const optEmail = (v: unknown): string | null => {
+  const s = optText(v, 120)?.toLowerCase() ?? null;
+  need(!s || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s), 'Revisa el correo.');
+  return s;
+};
+
+const usernameFree = async (login: string, exceptId: string | null = null) =>
+  need(!(await one('select 1 from users where lower(username) = $1 and id is distinct from $2', [login, exceptId])), 'Ese usuario ya existe. Elige otro.', 409);
+
+const emailFree = async (email: string | null, exceptId: string | null = null) =>
+  need(!email || !(await one('select 1 from users where lower(email) = $1 and id is distinct from $2', [email, exceptId])), 'Ya hay una cuenta con ese correo.', 409);
 
 // Registro de clientes para agendar
 cuentas.post('/auth/register', async (req, res) => {
   const name = text(req.body?.name, 'tu nombre', 80);
+  const login = username(req.body?.username);
+  const email = optEmail(req.body?.email);
   const phone = normPhone(req.body?.phone);
   const password = String(req.body?.password ?? '');
   need(phone.length === 10, 'Escribe tu celular de 10 dígitos.');
-  need(password.length >= 6, 'La clave debe tener al menos 6 caracteres.');
-  need(!(await one('select 1 from users where phone = $1', [phone])), 'Ya hay una cuenta con ese celular. Ingresa con tu clave.', 409);
+  need(password.length >= MIN_CLIENT_PASSWORD, `La clave debe tener al menos ${MIN_CLIENT_PASSWORD} caracteres.`);
+  await usernameFree(login);
+  await emailFree(email);
+  need(!(await one('select 1 from users where phone = $1', [phone])), 'Ya hay una cuenta con ese celular. Ingresa con tu usuario.', 409);
   const user = await tx(async (c) => {
     let customer = await one('select id from customers where phone = $1', [phone], c);
-    if (!customer) customer = await one('insert into customers (name, phone) values ($1, $2) returning id', [name, phone], c);
+    if (!customer) customer = await one('insert into customers (name, phone, email) values ($1, $2, $3) returning id', [name, phone, email], c);
     return one(
-      `insert into users (name, role, phone, password_hash, customer_id) values ($1, 'CLIENT', $2, $3, $4) returning *`,
-      [name, phone, await bcrypt.hash(password, 10), customer.id],
+      `insert into users (name, role, username, email, phone, password_hash, customer_id) values ($1, 'CLIENT', $2, $3, $4, $5, $6) returning *`,
+      [name, login, email, phone, await bcrypt.hash(password, 10), customer.id],
       c,
     );
   });
@@ -84,16 +92,16 @@ cuentas.get('/me', auth(), async (req, res) => {
 
 cuentas.get('/users', auth('OWNER', 'ADMIN'), async (req, res) => {
   const rows = await q(
-    `select id, name, role, email, active, pin_hash is not null as has_pin, password_hash is not null as has_password
+    `select id, name, role, username, email, active
      from users where role <> 'CLIENT' order by case role when 'OWNER' then 0 when 'ADMIN' then 1 else 2 end, name`,
   );
   // El administrador solo necesita nombres y roles para asignar motos
   res.json(req.user.role === 'OWNER' ? rows : rows.filter((r) => r.active).map(({ id, name, role }) => ({ id, name, role })));
 });
 
-const checkPin = (pin: unknown) => {
-  const s = String(pin ?? '');
-  need(/^\d{4}$/.test(s), 'El PIN debe tener 4 dígitos.');
+const staffPassword = (v: unknown) => {
+  const s = String(v ?? '');
+  need(s.length >= MIN_STAFF_PASSWORD, `La contraseña debe tener al menos ${MIN_STAFF_PASSWORD} caracteres.`);
   return s;
 };
 
@@ -101,16 +109,16 @@ cuentas.post('/users', auth('OWNER'), async (req, res) => {
   const name = text(req.body?.name, 'el nombre', 80);
   const role = String(req.body?.role);
   need(['ADMIN', 'WASHER'].includes(role), 'Rol no válido.');
-  const pin = checkPin(req.body?.pin);
-  const email = optText(req.body?.email, 120);
-  const password = optText(req.body?.password, 100);
-  need(!password || password.length >= 8, 'La clave debe tener al menos 8 caracteres.');
-  need(!email || !(await one('select 1 from users where lower(email) = lower($1)', [email])), 'Ya hay un usuario con ese correo.', 409);
+  const login = username(req.body?.username);
+  const password = staffPassword(req.body?.password);
+  const email = optEmail(req.body?.email);
+  await usernameFree(login);
+  await emailFree(email);
   const u = await one(
-    `insert into users (name, role, email, pin_hash, password_hash) values ($1, $2, $3, $4, $5) returning id, name, role`,
-    [name, role, email, await bcrypt.hash(pin, 10), password ? await bcrypt.hash(password, 10) : null],
+    `insert into users (name, role, username, email, password_hash) values ($1, $2, $3, $4, $5) returning id, name, role`,
+    [name, role, login, email, await bcrypt.hash(password, 10)],
   );
-  await audit(req.user.id, 'USUARIO_CREADO', 'user', u.id, { name, role });
+  await audit(req.user.id, 'USUARIO_CREADO', 'user', u.id, { name, role, usuario: login });
   res.status(201).json(u);
 });
 
@@ -128,12 +136,15 @@ cuentas.patch('/users/:id', auth('OWNER'), async (req, res) => {
     need(u.id !== req.user.id || b.active, 'No puedes desactivar tu propio usuario.');
     changes.active = !!b.active;
   }
-  if (b.pin) changes.pin_hash = await bcrypt.hash(checkPin(b.pin), 10);
-  if (b.password) {
-    need(String(b.password).length >= 8, 'La clave debe tener al menos 8 caracteres.');
-    changes.password_hash = await bcrypt.hash(String(b.password), 10);
+  if (b.username !== undefined) {
+    changes.username = username(b.username);
+    await usernameFree(changes.username as string, u.id);
   }
-  if (b.email !== undefined) changes.email = optText(b.email, 120);
+  if (b.password) changes.password_hash = await bcrypt.hash(staffPassword(b.password), 10);
+  if (b.email !== undefined) {
+    changes.email = optEmail(b.email);
+    await emailFree(changes.email as string | null, u.id);
+  }
   const keys = Object.keys(changes);
   need(keys.length, 'No hay cambios.');
   await q(

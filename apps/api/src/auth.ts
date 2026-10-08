@@ -70,5 +70,12 @@ export const optText = (v: unknown, max = 500): string | null => {
   return s || null;
 };
 
+/** Usuario para ingresar: minúsculas, letras, números, punto, guion y guion bajo. */
+export const username = (v: unknown): string => {
+  const s = String(v ?? '').trim().toLowerCase();
+  need(/^[a-z0-9._-]{3,30}$/.test(s), 'El usuario debe tener de 3 a 30 caracteres: letras sin tildes, números, punto, guion o guion bajo.');
+  return s;
+};
+
 export const normPhone = (v: unknown): string => String(v ?? '').replace(/\D/g, '');
 export const normPlate = (v: unknown): string => String(v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');

@@ -14,10 +14,10 @@ db/migrations   SQL de la base de datos (PostgreSQL / Supabase)
 
 | Rol | Cómo entra | Qué hace |
 | --- | --- | --- |
-| Propietario | Correo y contraseña | Todo: precios, usuarios, reportes con rentabilidad, anular cobros |
-| Administrador de turno | PIN (o correo y contraseña) | Recibe, asigna, cobra, abre y cierra caja, agenda. Para anular un cobro pide aprobación |
-| Lavador | PIN | Ve solo sus motos; marca inicio y fin del servicio |
-| Cliente | Celular y clave | Agenda su lavado en `/cliente` |
+| Propietario | Usuario y contraseña | Todo: precios, usuarios, reportes con rentabilidad, anular cobros |
+| Administrador de turno | Usuario y contraseña | Recibe, asigna, cobra, abre y cierra caja, agenda. Para anular un cobro pide aprobación |
+| Lavador | Usuario y contraseña | Ve solo sus motos; marca inicio y fin del servicio |
+| Cliente | Usuario o correo y clave | Agenda su lavado en `/cliente` |
 
 Pago a lavadores: 45 % de cada servicio que lava la persona (valor configurable en la tabla `settings`, clave `commission_pct`). Las propinas se reparten por igual entre quienes lavaron en el turno.
 
@@ -31,13 +31,14 @@ Pago a lavadores: 45 % de cada servicio que lava la persona (valor configurable 
    | --- | --- |
    | `DATABASE_URL` | La cadena del Session pooler de Supabase |
    | `JWT_SECRET` | Un texto largo y aleatorio |
-   | `OWNER_EMAIL` | Correo del propietario |
+   | `OWNER_USERNAME` | Usuario del propietario para entrar (ej. `propietario`) |
+   | `OWNER_EMAIL` | Opcional: correo del propietario |
    | `OWNER_PASSWORD` | Contraseña del propietario (mínimo 8 caracteres) |
    | `OWNER_NAME` | Nombre del propietario |
    | `NODE_ENV` | `production` |
 
 4. Al arrancar, la app aplica sola las migraciones de `db/migrations` y crea el usuario propietario si no existe.
-5. Entra con el correo del propietario, ve a **Ajustes** y crea al administrador y a los lavadores con su PIN.
+5. Entra con el usuario del propietario, ve a **Ajustes** y crea al administrador y a los lavadores con su usuario y contraseña.
 
 Las tablas quedan con RLS activo y sin políticas: solo el backend puede leerlas, no la API pública de Supabase.
 

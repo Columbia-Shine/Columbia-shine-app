@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import express, { NextFunction, Request, Response } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { HttpError } from './auth';
+import { HttpError, username } from './auth';
 import { migrate, one, pool, q } from './db';
 import { cuentas } from './routes-cuentas';
 import { operacion } from './routes-operacion';
@@ -11,16 +11,17 @@ import { ordenes } from './routes-ordenes';
 /** Crea el propietario la primera vez, con los datos de las variables de entorno. */
 async function seedOwner() {
   if (await one(`select 1 from users where role = 'OWNER'`)) return;
-  const { OWNER_EMAIL, OWNER_PASSWORD, OWNER_NAME } = process.env;
-  if (!OWNER_EMAIL || !OWNER_PASSWORD) {
-    console.warn('No hay propietario: define OWNER_EMAIL y OWNER_PASSWORD y reinicia.');
+  const { OWNER_USERNAME, OWNER_EMAIL, OWNER_PASSWORD, OWNER_NAME } = process.env;
+  if (!OWNER_USERNAME || !OWNER_PASSWORD) {
+    console.warn('No hay propietario: define OWNER_USERNAME y OWNER_PASSWORD y reinicia.');
     return;
   }
   if (OWNER_PASSWORD.length < 8) throw new Error('OWNER_PASSWORD debe tener al menos 8 caracteres');
-  await q(`insert into users (name, role, email, password_hash) values ($1, 'OWNER', $2, $3)`, [
-    OWNER_NAME || 'Propietario', OWNER_EMAIL.trim(), await bcrypt.hash(OWNER_PASSWORD, 10),
+  const login = username(OWNER_USERNAME);
+  await q(`insert into users (name, role, username, email, password_hash) values ($1, 'OWNER', $2, $3, $4)`, [
+    OWNER_NAME || 'Propietario', login, OWNER_EMAIL?.trim().toLowerCase() || null, await bcrypt.hash(OWNER_PASSWORD, 10),
   ]);
-  console.log('Propietario creado:', OWNER_EMAIL);
+  console.log('Propietario creado:', login);
 }
 
 async function start() {
