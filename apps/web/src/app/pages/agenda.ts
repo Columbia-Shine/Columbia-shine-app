@@ -30,6 +30,8 @@ abstract class Booker {
   protected time = signal('');
   protected serviceId = signal('');
   protected busy = signal(false);
+  /** Modal de confirmación abierto */
+  protected asking = signal(false);
 
   protected service = computed(() => this.services().find((s) => s.id === this.serviceId()));
 
@@ -60,8 +62,17 @@ abstract class Booker {
     this.api.get('/bookings').then((b) => this.bookings.set(b), this.toast.fail);
   }
 
+  protected dayName = (id: string) => dayLabel(id);
+
+  /** Revisa lo mínimo y abre el modal; la reserva se crea solo al confirmar ahí. */
+  protected ask(ready: boolean) {
+    if (!this.time()) return this.toast.show('Elige una hora disponible.', true);
+    if (ready) this.asking.set(true);
+  }
+
   protected async book(extra: Record<string, unknown>, done: string) {
     if (!this.time()) return this.toast.show('Elige una hora disponible.', true);
+    this.asking.set(false);
     this.busy.set(true);
     try {
       await this.api.post('/bookings', { date: this.day(), time: this.time(), serviceId: this.serviceId(), ...extra });
@@ -157,9 +168,28 @@ abstract class Booker {
         @if (service(); as s) {
           @if (time()) { <div class="aviso">{{ s.name }} a las {{ hourLabel(time()) }}. Total {{ s.price | money }}.</div> }
         }
-        <button class="btn primario grande" [disabled]="busy()" (click)="confirm()">Confirmar reserva</button>
+        <button class="btn primario grande" [disabled]="busy()" (click)="ask(canBook())">Agendar</button>
         <p class="chico suave" style="text-align: center">Pagas en el local al recoger tu moto.</p>
       </section>
+
+      @if (asking()) {
+        <div class="modal-fondo" (click)="asking.set(false)">
+          <section class="modal card col" role="dialog" aria-modal="true" aria-labelledby="conf-titulo" (click)="$event.stopPropagation()" (keydown.escape)="asking.set(false)">
+            <h2 id="conf-titulo">¿Confirmas tu reserva?</h2>
+            <div class="col" style="gap: 6px">
+              <div class="row between"><span class="suave">Día</span><span class="fuerte">{{ dayName(day()) }}</span></div>
+              <div class="row between"><span class="suave">Hora</span><span class="fuerte">{{ hourLabel(time()) }}</span></div>
+              <div class="row between"><span class="suave">Servicio</span><span class="fuerte">{{ service()?.name }}</span></div>
+              <div class="row between"><span class="suave">Moto</span><span class="fuerte">{{ bikePlate() }}</span></div>
+              <div class="row between sep"><span class="fuerte">Total a pagar en el local</span><span class="total">{{ service()?.price | money }}</span></div>
+            </div>
+            <div class="row">
+              <button class="btn primario grow" autofocus [disabled]="busy()" (click)="confirm()">Sí, agendar</button>
+              <button class="btn grow" (click)="asking.set(false)">Cambiar</button>
+            </div>
+          </section>
+        </div>
+      }
     </main>
   `,
 })
@@ -193,8 +223,17 @@ export class Agendar extends Booker {
     }
   }
 
+  protected bikePlate = computed(() => this.bikes().find((b) => b.id === this.bikeId())?.plate ?? '');
+
+  canBook(): boolean {
+    if (!this.bikeId()) {
+      this.toast.show('Guarda primero tu moto.', true);
+      return false;
+    }
+    return true;
+  }
+
   confirm() {
-    if (!this.bikeId()) return this.toast.show('Guarda primero tu moto.', true);
     this.book({ bikeId: this.bikeId() }, 'Reserva confirmada. Te esperamos.');
   }
 }
@@ -256,9 +295,27 @@ export class Agendar extends Booker {
               </button>
             }
           </div>
-          <button class="btn primario" [disabled]="busy()" (click)="confirm()">Agendar</button>
+          <button class="btn primario" [disabled]="busy()" (click)="ask(canBook())">Agendar</button>
         </section>
       </div>
+
+      @if (asking()) {
+        <div class="modal-fondo" (click)="asking.set(false)">
+          <section class="modal card col" role="dialog" aria-modal="true" aria-labelledby="conf-titulo" (click)="$event.stopPropagation()" (keydown.escape)="asking.set(false)">
+            <h2 id="conf-titulo">¿Confirmas la reserva?</h2>
+            <div class="col" style="gap: 6px">
+              <div class="row between"><span class="suave">Cliente</span><span class="fuerte">{{ customerName() }} · {{ customerPhone() }}</span></div>
+              <div class="row between"><span class="suave">Día</span><span class="fuerte">{{ dayName(day()) }}</span></div>
+              <div class="row between"><span class="suave">Hora</span><span class="fuerte">{{ hourLabel(time()) }}</span></div>
+              <div class="row between"><span class="suave">Servicio</span><span class="fuerte">{{ service()?.name }} · {{ service()?.price | money }}</span></div>
+            </div>
+            <div class="row">
+              <button class="btn primario grow" autofocus [disabled]="busy()" (click)="confirm()">Sí, agendar</button>
+              <button class="btn grow" (click)="asking.set(false)">Cambiar</button>
+            </div>
+          </section>
+        </div>
+      }
     </main>
   `,
 })
@@ -276,6 +333,14 @@ export class Agenda extends Booker {
     }
     return out;
   });
+
+  canBook(): boolean {
+    if (!this.customerName().trim() || this.customerPhone().replace(/\D/g, '').length !== 10) {
+      this.toast.show('Escribe el nombre y el celular de 10 dígitos del cliente.', true);
+      return false;
+    }
+    return true;
+  }
 
   async confirm() {
     const ok = await this.book({ customerName: this.customerName(), customerPhone: this.customerPhone() }, 'Reserva creada.');

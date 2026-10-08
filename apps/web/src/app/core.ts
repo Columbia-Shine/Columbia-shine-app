@@ -1,4 +1,5 @@
-import { Injectable, Pipe, PipeTransform, inject, signal } from '@angular/core';
+import { Directive, ElementRef, Injectable, Pipe, PipeTransform, forwardRef, inject, signal } from '@angular/core';
+import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { CanActivateFn, Router } from '@angular/router';
 
 export type Role = 'OWNER' | 'ADMIN' | 'WASHER' | 'CLIENT';
@@ -143,6 +144,47 @@ export const money = (n: unknown): string => {
 @Pipe({ name: 'money' })
 export class MoneyPipe implements PipeTransform {
   transform = money;
+}
+
+/**
+ * Campo de pesos con separador de miles mientras se escribe: muestra 26.000 y el modelo recibe 26000
+ * (o null si está vacío). Uso: <input class="campo" dinero [(ngModel)]="valor" />
+ */
+@Directive({
+  selector: 'input[dinero]',
+  host: { type: 'text', inputmode: 'numeric', autocomplete: 'off', '(input)': 'onInput()', '(blur)': 'touched()' },
+  providers: [{ provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => MoneyInput), multi: true }],
+})
+export class MoneyInput implements ControlValueAccessor {
+  private el = inject<ElementRef<HTMLInputElement>>(ElementRef).nativeElement;
+  private changed: (v: number | null) => void = () => {};
+  protected touched: () => void = () => {};
+
+  writeValue(v: unknown) {
+    this.el.value = v === null || v === undefined || v === '' ? '' : pesos.format(Number(v) || 0);
+  }
+  registerOnChange(fn: (v: number | null) => void) {
+    this.changed = fn;
+  }
+  registerOnTouched(fn: () => void) {
+    this.touched = fn;
+  }
+  setDisabledState(disabled: boolean) {
+    this.el.disabled = disabled;
+  }
+
+  protected onInput() {
+    const el = this.el;
+    // Conserva la posición del cursor contando los dígitos que hay antes de él
+    const digitsBefore = el.value.slice(0, el.selectionStart ?? el.value.length).replace(/\D/g, '').length;
+    const digits = el.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 12);
+    const value = digits ? Number(digits) : null;
+    el.value = value === null ? '' : pesos.format(value);
+    let pos = 0;
+    for (let seen = 0; pos < el.value.length && seen < digitsBefore; pos++) if (/\d/.test(el.value[pos])) seen++;
+    el.setSelectionRange(pos, pos);
+    this.changed(value);
+  }
 }
 
 const TZ = 'America/Bogota';

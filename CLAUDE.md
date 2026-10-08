@@ -76,7 +76,7 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Sin checklist ni revisión de entrega: se asigna lavador, se lava y al terminar queda lista para entregar.
 - El lavador solo hace WAITING→WASHING y WASHING→READY, y solo en sus órdenes.
 - `REVIEW` sigue en el CHECK de la tabla `orders` por compatibilidad, pero ya no se usa (la API lo rechaza como destino).
-- Para iniciar el lavado debe haber lavador asignado.
+- Para iniciar el lavado debe haber lavador asignado. Solo lavan los usuarios ADMIN y WASHER: al propietario nunca se le asigna una moto (lo valida la API).
 - Número de orden: `CS-000001` (secuencia `order_number_seq`).
 
 ## Reglas del negocio que no se deben romper
@@ -109,7 +109,8 @@ Adicionales: detallado de motor $15.000, cadena $12.000, cera porcelanizadora $1
 ## Agenda
 
 - Lunes a viernes 10:00 a. m. a 7:30 p. m. (cupos de 10:00 a 6:00 p. m.); sábado y domingo 9:00 a. m. a 5:30 p. m. (cupos de 9:00 a 4:00 p. m.).
-- 2 cupos por hora (`settings.slot_capacity`), hasta 30 días adelante, máximo 3 reservas activas por cliente.
+- 2 cupos por hora (`settings.slot_capacity`), hasta 30 días adelante, máximo 3 reservas activas por cliente y **máximo 2 para un mismo día** (`MAX_PER_DAY` en `routes-operacion.ts`), para que nadie acapare cupos.
+- Antes de crear la reserva se confirma en un modal con el resumen (cliente y administrador).
 - Agendan el cliente registrado (`/cliente`) y el administrador o propietario (`/agenda`). "Llegó: recibir" abre la recepción con los datos de la reserva.
 
 ## Base de datos
@@ -122,6 +123,8 @@ Adicionales: detallado de motor $15.000, cadena $12.000, cera porcelanizadora $1
 
 - Backend: validar con `need()`, `int()`, `text()`; errores al usuario con `HttpError` y mensajes en español; operaciones de varias escrituras dentro de `tx()`.
 - Frontend: signals para todo el estado (no hay zone.js); `[(ngModel)]` enlazado a signals; llamadas con `Api` y errores con `toast.fail`.
+- Campos de dinero: `<input class="campo" dinero [(ngModel)]="valor" />` (directiva `MoneyInput` de `core.ts`): muestra separador de miles y el modelo recibe un número o null. No usar `type="number"` para pesos.
+- Modales: `.modal-fondo` + `.modal.card` de `styles.css`, con `role="dialog"` y `aria-modal`.
 - Controles de mínimo 44 px de alto, acción principal en amarillo, etiquetas `<label>` reales, nada de emojis.
 
 ## Diseño de marca

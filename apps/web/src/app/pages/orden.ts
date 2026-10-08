@@ -1,11 +1,11 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Api, METHOD_NAMES, minutesSince, money, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../core';
+import { Api, METHOD_NAMES, minutesSince, money, MoneyInput, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../core';
 
 @Component({
   selector: 'app-orden',
-  imports: [FormsModule, RouterLink, MoneyPipe, WhenPipe],
+  imports: [FormsModule, RouterLink, MoneyInput, MoneyPipe, WhenPipe],
   template: `
     <main class="page">
       @if (order(); as o) {
@@ -108,7 +108,7 @@ import { Api, METHOD_NAMES, minutesSince, money, MoneyPipe, STATUS_NAMES, Toast,
                 @if (extra()?.price_from) {
                   <div>
                     <label for="precio">Valor acordado con el cliente</label>
-                    <input id="precio" class="campo" type="number" inputmode="numeric" [min]="extra().price" step="1000" [(ngModel)]="extraPrice" />
+                    <input id="precio" class="campo" dinero [placeholder]="'Mínimo ' + (extra().price | money)" [(ngModel)]="extraPrice" />
                   </div>
                 }
                 <button class="btn" [disabled]="!extraId() || busy()" (click)="addItem()">Agregar</button>
@@ -147,7 +147,7 @@ export class Orden {
   constructor() {
     this.load();
     Promise.all([this.api.get('/users'), this.api.get('/services')]).then(([u, s]) => {
-      this.washers.set(u);
+      this.washers.set(u.filter((x: any) => x.role !== 'OWNER'));
       this.services.set(s);
     }, this.toast.fail);
   }
@@ -197,7 +197,7 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
 
 @Component({
   selector: 'app-cobro',
-  imports: [FormsModule, RouterLink, MoneyPipe],
+  imports: [FormsModule, RouterLink, MoneyInput, MoneyPipe],
   template: `
     <main class="page">
       <h1>Cobrar y entregar</h1>
@@ -229,7 +229,7 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
 
               <div class="row">
                 <label for="tip" class="grow" style="margin: 0; font-size: 15px; color: #fff; flex-basis: 200px">Propina para el equipo</label>
-                <input id="tip" class="campo" style="width: 160px" type="number" inputmode="numeric" min="0" step="1000" [(ngModel)]="tip" />
+                <input id="tip" class="campo" style="width: 160px" dinero [(ngModel)]="tip" />
               </div>
 
               @if (method() === 'EFECTIVO') {
@@ -242,7 +242,7 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
                   </div>
                   <div>
                     <label for="cash">Otro valor</label>
-                    <input id="cash" class="campo" type="number" inputmode="numeric" step="1000" [(ngModel)]="cash" />
+                    <input id="cash" class="campo" dinero [(ngModel)]="cash" />
                   </div>
                   <div class="tile row between"><span class="fuerte">Devolver</span><span class="num fuerte" style="font-size: 32px">{{ change() | money }}</span></div>
                 </div>

@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Api, MoneyPipe, ROLE_NAMES, Toast, WhenPipe } from '../core';
+import { Api, MoneyInput, MoneyPipe, ROLE_NAMES, Toast, WhenPipe } from '../core';
 
 const PERMISSIONS: [string, string, string, string][] = [
   ['Recibir moto y crear orden', 'Sí', 'Sí', 'No'],
@@ -26,7 +26,7 @@ const ACTIONS: Record<string, string> = {
 
 @Component({
   selector: 'app-ajustes',
-  imports: [FormsModule, MoneyPipe, WhenPipe],
+  imports: [FormsModule, MoneyInput, MoneyPipe, WhenPipe],
   template: `
     <main class="page">
       <h1>Ajustes</h1>
@@ -88,7 +88,7 @@ const ACTIONS: Record<string, string> = {
                       <td>{{ s.kind === 'BASE' ? 'Servicio' : s.price_from ? 'Adicional (desde)' : 'Adicional' }}</td>
                       <td class="der">
                         @if (priceOf() === s.id) {
-                          <input class="campo" style="width: 130px; min-height: 44px" type="number" inputmode="numeric" step="1000" min="1" [attr.aria-label]="'Precio de ' + s.name" [(ngModel)]="newPrice" />
+                          <input class="campo" style="width: 130px; min-height: 44px" dinero [attr.aria-label]="'Precio de ' + s.name" [(ngModel)]="newPrice" />
                         } @else {
                           {{ s.price | money }}
                         }

@@ -1,11 +1,11 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Api, METHOD_NAMES, MoneyPipe, Session, Toast, WhenPipe } from '../core';
+import { Api, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } from '../core';
 
 @Component({
   selector: 'app-caja',
-  imports: [FormsModule, NgTemplateOutlet, MoneyPipe, WhenPipe],
+  imports: [FormsModule, NgTemplateOutlet, MoneyInput, MoneyPipe, WhenPipe],
   template: `
     <main class="page">
       @if (loading()) {
@@ -30,7 +30,7 @@ import { Api, METHOD_NAMES, MoneyPipe, Session, Toast, WhenPipe } from '../core'
           <p class="suave">No hay turno abierto. Cuenta la base de efectivo con la que arranca la jornada.</p>
           <div>
             <label for="base">Base en efectivo</label>
-            <input id="base" class="campo grande" type="number" inputmode="numeric" min="0" step="1000" [(ngModel)]="openingCash" />
+            <input id="base" class="campo grande" dinero [(ngModel)]="openingCash" />
           </div>
           <button class="btn primario grande" [disabled]="busy()" (click)="open()">Abrir turno</button>
         </section>
@@ -59,7 +59,7 @@ import { Api, METHOD_NAMES, MoneyPipe, Session, Toast, WhenPipe } from '../core'
                 }
               </div>
               <div class="row">
-                <input class="campo" style="width: 140px" type="number" inputmode="numeric" min="0" step="1000" placeholder="Valor" aria-label="Valor" [(ngModel)]="movAmount" />
+                <input class="campo" style="width: 140px" dinero placeholder="Valor" aria-label="Valor" [(ngModel)]="movAmount" />
                 <input class="campo grow" style="flex-basis: 160px" placeholder="¿En qué?" aria-label="Descripción" [(ngModel)]="movText" />
               </div>
               <button class="btn" [disabled]="busy()" (click)="addMovement()">Guardar movimiento</button>
@@ -137,7 +137,7 @@ import { Api, METHOD_NAMES, MoneyPipe, Session, Toast, WhenPipe } from '../core'
           <div class="row" style="align-items: flex-end">
             <div>
               <label for="contado">Efectivo contado</label>
-              <input id="contado" class="campo grande" style="width: 240px" type="number" inputmode="numeric" min="0" step="1000" [(ngModel)]="counted" />
+              <input id="contado" class="campo grande" style="width: 240px" dinero [(ngModel)]="counted" />
             </div>
             @if (counted() !== null) {
               <div class="aviso row between grow" [class.alerta]="difference() !== 0" style="flex-basis: 240px; min-height: 64px">

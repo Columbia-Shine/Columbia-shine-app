@@ -223,6 +223,8 @@ operacion.get('/bookings', auth(), async (req, res) => {
   res.json(await q(`${base} where k.status = 'BOOKED' and ${localDate('k.starts_at')} >= ${TODAY} order by k.starts_at limit 200`));
 });
 
+const MAX_PER_DAY = 2;
+
 operacion.post('/bookings', auth('OWNER', 'ADMIN', 'CLIENT'), async (req, res) => {
   const b = req.body ?? {};
   const date = String(b.date);
@@ -244,6 +246,13 @@ operacion.post('/bookings', auth('OWNER', 'ADMIN', 'CLIENT'), async (req, res) =
       customerId = req.user.customerId as string;
       const mine = await one(`select count(*) as n from bookings where customer_id = $1 and status = 'BOOKED' and starts_at > now()`, [customerId], c);
       need(Number(mine.n) < 3, 'Ya tienes 3 reservas activas. Cancela una para agendar otra.');
+      // Evita que una cuenta acapare los cupos de un día
+      const sameDay = await one(
+        `select count(*) as n from bookings where customer_id = $1 and status = 'BOOKED' and ${localDate('starts_at')} = $2::date`,
+        [customerId, date],
+        c,
+      );
+      need(Number(sameDay.n) < MAX_PER_DAY, `Solo puedes agendar ${MAX_PER_DAY} lavadas para un mismo día.`);
     } else if (b.customerId) {
       customerId = String(b.customerId);
       need(await one('select 1 from customers where id = $1', [customerId], c), 'Cliente no encontrado.', 404);

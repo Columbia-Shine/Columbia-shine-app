@@ -160,7 +160,7 @@ export class Recepcion {
     this.serviceId.set(p.get('servicio') ?? '');
     Promise.all([this.api.get('/services'), this.api.get('/users')]).then(([s, u]) => {
       this.services.set(s);
-      this.washers.set(u);
+      this.washers.set(u.filter((x: any) => x.role !== 'OWNER'));
     }, this.toast.fail);
     if (p.get('placa')) this.onPlate(p.get('placa')!);
   }

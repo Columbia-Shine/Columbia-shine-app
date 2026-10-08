@@ -124,3 +124,7 @@ th.der, td.der { padding-right: 0; padding-left: 8px; }
 /* Pantallas de ingreso (equipo y clientes) */
 .ingreso { align-items: center; text-align: center; padding-top: 32px; }
 .ingreso .ancho { width: 100%; text-align: left; }
+
+/* Ventana de confirmación */
+.modal-fondo { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(11, 15, 23, 0.8); }
+.modal { width: 100%; max-width: 440px; gap: 16px; }
