@@ -201,7 +201,10 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
   imports: [FormsModule, RouterLink, MoneyInput, MoneyPipe],
   template: `
     <main class="page">
-      <h1>Cobrar y entregar</h1>
+      <div class="row between">
+        <h1>Cobrar y entregar</h1>
+        <a class="btn chico" routerLink="/facturar">Volver a facturar</a>
+      </div>
       @if (order(); as o) {
         <div class="split">
           <section class="card side col" style="flex-basis: 380px">
@@ -217,8 +220,21 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
             <a class="btn chico" [routerLink]="['/ordenes', o.id]">Agregar adicional o ver la orden</a>
           </section>
 
-          @if (o.status === 'READY') {
+          @if (payable()) {
             <section class="card main col" style="gap: 18px">
+              @if (o.status !== 'READY') {
+                <div class="aviso chico">Esta moto está "{{ status[o.status] }}". Al cobrar queda entregada de una vez.</div>
+              }
+              @if (!o.washer_id) {
+                <div>
+                  <label for="lavo">¿Quién la lavó?</label>
+                  <select id="lavo" class="campo" [(ngModel)]="washerId">
+                    <option value="">Elegir…</option>
+                    @for (w of washers(); track w.id) { <option [value]="w.id">{{ w.name }}</option> }
+                  </select>
+                  <p class="chico suave" style="margin-top: 6px">De aquí sale su comisión.</p>
+                </div>
+              }
               <div class="col">
                 <p class="rotulo">Cómo paga</p>
                 <div class="grid-sm">
@@ -261,8 +277,9 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
           } @else {
             <section class="card main col">
               <p>Esta orden está en "{{ status[o.status] }}".</p>
-              <p class="suave">{{ o.status === 'DELIVERED' ? 'Ya fue cobrada y entregada.' : 'Solo se cobra cuando la moto está lista para entregar.' }}</p>
-              <a class="btn" [routerLink]="['/ordenes', o.id]">Ir a la orden</a>
+              <p class="suave">{{ o.payment_id ? 'Ya fue cobrada y entregada.' : 'Esta orden ya está cerrada.' }}</p>
+              @if (o.payment_id) { <a class="btn primario" [routerLink]="['/comprobante', o.payment_id]">Ver comprobante</a> }
+              <a class="btn" routerLink="/facturar">Volver a facturar</a>
             </section>
           }
         </div>
@@ -287,7 +304,11 @@ export class Cobro {
   protected cash = signal<number | null>(null);
   protected reference = signal('');
   protected busy = signal(false);
+  protected washers = signal<any[]>([]);
+  protected washerId = signal('');
 
+  /** Se factura desde cualquier estado abierto, sin pasar por "Lista para entregar". */
+  protected payable = computed(() => ['WAITING', 'WASHING', 'REVIEW', 'READY'].includes(this.order()?.status) && !this.order()?.payment_id);
   /** Total a recibir: servicio más propina. */
   protected due = computed(() => (this.order()?.total ?? 0) + (Number(this.tip()) || 0));
   protected bills = computed(() => {
@@ -299,14 +320,17 @@ export class Cobro {
 
   constructor() {
     this.api.get('/orders/' + this.id).then((o) => this.order.set(o), this.toast.fail);
+    this.api.get('/users').then((u: any[]) => this.washers.set(u.filter((x) => x.role !== 'OWNER')), this.toast.fail);
   }
 
   async pay() {
     const cash = this.cash() === null ? this.due() : Number(this.cash());
+    if (!this.order()?.washer_id && !this.washerId()) return this.toast.show('Elige quién lavó la moto.', true);
     if (this.method() === 'EFECTIVO' && cash < this.due()) return this.toast.show('El efectivo recibido no alcanza.', true);
     this.busy.set(true);
     try {
       const out = await this.api.post(`/orders/${this.id}/pay`, {
+        washerId: this.washerId() || null,
         method: this.method(),
         tip: Number(this.tip()) || 0,
         cashReceived: this.method() === 'EFECTIVO' ? cash : null,

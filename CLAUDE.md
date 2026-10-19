@@ -91,6 +91,11 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Un cliente puede tener varias motos (`bikes.customer_id`). El cliente las agrega al agendar; en el local, con una placa nueva se elige "Ya es cliente: otra moto", se busca por nombre, celular o placa y se envía `customerId` en `POST /orders`.
 - Los clientes de afán no aparecen en esa búsqueda.
 
+## Facturar
+
+- `/facturar` (menú "Facturar"): "Por cobrar" con todas las órdenes abiertas sin cobro y su estado, buscador por placa, cliente u orden, y botón Cobrar. Abajo, "Cobrado en este turno" con el comprobante de cada cobro.
+- Avisa si no hay turno de caja abierto.
+
 ## Comprobante de venta
 
 - `/comprobante/:paymentId` (OWNER y ADMIN): comprobante imprimible de un cobro, con logo, placa, servicios, propina, medio de pago, recibido y cambio. Botones para imprimir y enviar por WhatsApp. Si el cobro fue anulado sale la marca "ANULADO".
@@ -101,7 +106,9 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 ## Reglas del negocio que no se deben romper
 
 - **Un cobro nunca se borra.** ADMIN pide la anulación (`void_status = REQUESTED`); OWNER aprueba o rechaza. Al aprobar, el cobro queda `APPROVED` (anulado) y la orden vuelve a `READY`.
-- Solo se cobra una orden en `READY` y con un **turno de caja abierto**. Un solo turno abierto a la vez.
+- Se cobra una orden abierta en **cualquier estado** (WAITING, WASHING o READY), desde la vista **Facturar** (`/facturar`), y solo con un **turno de caja abierto**. Un solo turno abierto a la vez.
+- Al cobrar, la orden pasa directo a `DELIVERED` y los tiempos que falten (`started_at`, `finished_at`, `ready_at`) quedan con la hora del cobro.
+- **Sin lavador no se cobra**: la comisión sale de `orders.washer_id`. Si la orden no tiene, se elige en la pantalla de cobro (`washerId` en `POST /orders/:id/pay`), solo ADMIN o WASHER.
 - Una orden con cobro activo no se puede cancelar ni modificar.
 - **Comisión: 45%** del total de cada orden que lavó la persona (incluye adicionales). Valor en `settings.commission_pct`. Sin base fija en el sistema: la base temporal de Gregorio la maneja el dueño por fuera.
 - Propinas: se reparten por igual entre quienes lavaron en el turno.

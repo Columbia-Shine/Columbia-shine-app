@@ -50,6 +50,7 @@ export class App {
       { path: '/', label: 'Inicio' },
       { path: '/recepcion', label: 'Recepción' },
       { path: '/ordenes', label: 'Órdenes' },
+      { path: '/facturar', label: 'Facturar' },
       { path: '/caja', label: 'Caja' },
       { path: '/agenda', label: 'Agenda' },
       { path: '/clientes', label: 'Clientes' },

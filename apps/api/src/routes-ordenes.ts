@@ -316,10 +316,19 @@ ordenes.post('/orders/:id/pay', auth(...MANAGERS), async (req, res) => {
     const locked = await one('select id from orders where id = $1 for update', [String(req.params.id)], c);
     need(locked, 'Orden no encontrada.', 404);
     const o = await loadOrder(locked.id, c);
-    need(o.status === 'READY', 'Primero pasa la moto a "Lista para entregar".');
+    // Se puede facturar desde cualquier estado abierto: la orden se cierra de una vez
+    need(['WAITING', 'WASHING', 'REVIEW', 'READY'].includes(o.status), 'Esta orden ya está cerrada.');
     need(!o.payment_id, 'Esta orden ya fue cobrada.', 409);
     const shift = await openShift(c);
     need(shift, 'No hay turno abierto. Abre la caja antes de cobrar.');
+    // La comisión sale del lavador de la orden: sin lavador no se cobra
+    let washerId: string | null = o.washer_id;
+    if (b.washerId) {
+      const w = await one(`select id from users where id = $1 and active and role in ('ADMIN', 'WASHER')`, [String(b.washerId)], c);
+      need(w, 'Ese lavador no está disponible.');
+      washerId = w.id;
+    }
+    need(washerId, 'Elige quién lavó la moto.');
     let cash: number | null = null;
     if (method === 'EFECTIVO') {
       const received = b.cashReceived === undefined || b.cashReceived === null ? o.total + tip : int(b.cashReceived, 'El efectivo recibido');
@@ -332,8 +341,14 @@ ordenes.post('/orders/:id/pay', auth(...MANAGERS), async (req, res) => {
       [o.id, shift.id, method, o.total, tip, cash, optText(b.reference, 40), req.user.id],
       c,
     );
-    await c.query(`update orders set status = 'DELIVERED', delivered_at = now() where id = $1`, [o.id]);
-    await audit(req.user.id, 'COBRO', 'payment', p.id, { orden: o.code, medio: method, valor: o.total, propina: tip }, c);
+    // Los tiempos que no se marcaron quedan con la hora del cobro
+    await c.query(
+      `update orders set status = 'DELIVERED', delivered_at = now(), washer_id = $2,
+         started_at = coalesce(started_at, now()), finished_at = coalesce(finished_at, now()), ready_at = coalesce(ready_at, now())
+       where id = $1`,
+      [o.id, washerId],
+    );
+    await audit(req.user.id, 'COBRO', 'payment', p.id, { orden: o.code, medio: method, valor: o.total, propina: tip, estado_previo: o.status }, c);
     return { paymentId: p.id, change: cash === null ? 0 : cash - o.total - tip };
   });
   res.status(201).json(out);
