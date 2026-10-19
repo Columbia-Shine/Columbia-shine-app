@@ -35,7 +35,7 @@ const COLUMNS = ['WAITING', 'WASHING', 'READY'];
                     </div>
                     <div class="placa">{{ o.plate }}</div>
                     <div class="chico">{{ o.brand }} {{ o.model }} · {{ o.customer_name }}</div>
-                    <div class="servicio">{{ o.service_name }}</div>
+                    <div class="servicio">{{ o.service_name }} @if (o.payment_id) { <span class="etiqueta aqua">Pagada</span> }</div>
                     @if (extras(o); as x) { <div class="chico suave">+ {{ x }}</div> }
                     <div class="row between" style="margin-top: 4px">
                       <span class="chico suave">{{ o.washer_name || 'Sin asignar' }}</span>
@@ -43,6 +43,7 @@ const COLUMNS = ['WAITING', 'WASHING', 'READY'];
                         @case ('assign') { <a class="btn chico" [routerLink]="['/ordenes', o.id]">Asignar</a> }
                         @case ('start') { <button class="btn chico" (click)="move(o, 'WASHING')">Iniciar</button> }
                         @case ('pay') { <a class="btn chico primario" [routerLink]="['/cobro', o.id]">Cobrar {{ o.total | money }}</a> }
+                        @case ('deliver') { <button class="btn chico primario" (click)="move(o, 'DELIVERED')">Entregar</button> }
                         @default { <a class="btn chico" [routerLink]="['/ordenes', o.id]">Ver</a> }
                       }
                     </div>
@@ -133,7 +134,7 @@ export class Ordenes implements OnDestroy {
 
   action(o: any): string {
     if (o.status === 'WAITING') return o.washer_id ? 'start' : 'assign';
-    if (o.status === 'READY') return 'pay';
+    if (o.status === 'READY') return o.payment_id ? 'deliver' : 'pay';
     return 'view';
   }
 

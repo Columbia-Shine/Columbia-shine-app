@@ -18,7 +18,10 @@ import { Api, METHOD_NAMES, minutesSince, money, MoneyInput, MoneyPipe, STATUS_N
               @if (o.customer_phone) { · {{ o.customer_phone }} } · {{ o.service_name }}
             </p>
           </div>
-          <span class="etiqueta" [class.amarilla]="o.status === 'READY'" [class.azul]="o.status !== 'READY'" style="font-size: 14px; padding: 8px 14px">{{ names[o.status] }}</span>
+          <div class="row">
+            @if (o.payment_id && open()) { <span class="etiqueta aqua" style="font-size: 14px; padding: 8px 14px">Pagada</span> }
+            <span class="etiqueta" [class.amarilla]="o.status === 'READY'" [class.azul]="o.status !== 'READY'" style="font-size: 14px; padding: 8px 14px">{{ names[o.status] }}</span>
+          </div>
         </div>
 
         <div class="split">
@@ -38,10 +41,19 @@ import { Api, METHOD_NAMES, minutesSince, money, MoneyInput, MoneyPipe, STATUS_N
                   @case ('READY') {
                     <p class="suave">Lista hace {{ since(o.ready_at) }} min.</p>
                     <div class="row">
-                      <a class="btn primario grande" [routerLink]="['/cobro', o.id]">Cobrar {{ o.total | money }}</a>
+                      @if (o.payment_id) {
+                        <button class="btn primario grande" [disabled]="busy()" (click)="move('DELIVERED', 'Moto entregada.')">Entregar</button>
+                      } @else {
+                        <a class="btn primario grande" [routerLink]="['/cobro', o.id]">Cobrar y entregar {{ o.total | money }}</a>
+                      }
                       <button class="btn" [disabled]="busy()" (click)="move('WASHING')">Devolver a lavado</button>
                     </div>
                   }
+                }
+                @if (o.payment_id && o.status !== 'READY') {
+                  <p class="chico suave">Ya está pagada: cuando quede lista, la entregas desde aquí.</p>
+                } @else if (!o.payment_id && o.status !== 'READY') {
+                  <a class="btn chico" style="align-self: flex-start" [routerLink]="['/cobro', o.id]">Cobrar ya (sigue su flujo)</a>
                 }
               </section>
 
@@ -171,7 +183,7 @@ export class Orden {
     }
   }
 
-  move = (status: string) => this.run(() => this.api.post(`/orders/${this.id}/status`, { status }));
+  move = (status: string, done?: string) => this.run(() => this.api.post(`/orders/${this.id}/status`, { status }), done);
   assign = (washerId: string) => this.run(() => this.api.post(`/orders/${this.id}/assign`, { washerId }), 'Lavador asignado. Ya le aparece en su celular.');
   removeItem = (itemId: string) => this.run(() => this.api.del(`/orders/${this.id}/items/${itemId}`));
 
@@ -202,7 +214,7 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
   template: `
     <main class="page">
       <div class="row between">
-        <h1>Cobrar y entregar</h1>
+        <h1>Cobrar</h1>
         <a class="btn chico" routerLink="/facturar">Volver a facturar</a>
       </div>
       @if (order(); as o) {
@@ -216,24 +228,18 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
                 <div class="row between"><span [class.fuerte]="i.kind === 'BASE'" [class.suave]="i.kind !== 'BASE'">{{ i.name }}</span><span class="num">{{ i.price | money }}</span></div>
               }
             </div>
-            <div class="row between sep"><span class="fuerte">Total</span><span class="total" style="font-size: 40px">{{ o.total | money }}</span></div>
+            @if (discount() > 0) {
+              <div class="row between sep"><span>Subtotal</span><span class="num">{{ o.total | money }}</span></div>
+              <div class="row between amarillo"><span>Descuento</span><span class="num">−{{ discount() | money }}</span></div>
+            }
+            <div class="row between sep"><span class="fuerte">Total</span><span class="total" style="font-size: 40px">{{ o.total - discount() | money }}</span></div>
             <a class="btn chico" [routerLink]="['/ordenes', o.id]">Agregar adicional o ver la orden</a>
           </section>
 
           @if (payable()) {
             <section class="card main col" style="gap: 18px">
-              @if (o.status !== 'READY') {
-                <div class="aviso chico">Esta moto está "{{ status[o.status] }}". Al cobrar queda entregada de una vez.</div>
-              }
-              @if (!o.washer_id) {
-                <div>
-                  <label for="lavo">¿Quién la lavó?</label>
-                  <select id="lavo" class="campo" [(ngModel)]="washerId">
-                    <option value="">Elegir…</option>
-                    @for (w of washers(); track w.id) { <option [value]="w.id">{{ w.name }}</option> }
-                  </select>
-                  <p class="chico suave" style="margin-top: 6px">De aquí sale su comisión.</p>
-                </div>
+              @if (!ready()) {
+                <div class="aviso chico">Esta moto está "{{ status[o.status] }}". Se registra el pago y la orden sigue su flujo; cuando quede lista, la entregas desde la orden.</div>
               }
               <div class="col">
                 <p class="rotulo">Cómo paga</p>
@@ -242,6 +248,26 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
                     <button class="opcion" style="min-height: 64px; text-align: center" [attr.aria-pressed]="method() === m" (click)="method.set(m)">{{ names[m] }}</button>
                   }
                 </div>
+              </div>
+
+              <div class="col" style="gap: 10px">
+                <div class="row between">
+                  <label for="desc" style="margin: 0; font-size: 15px; color: #fff">Descuento</label>
+                  <div class="row" style="gap: 6px">
+                    <button class="pastilla" [attr.aria-pressed]="discountMode() === 'valor'" (click)="discountMode.set('valor')">Valor $</button>
+                    <button class="pastilla" [attr.aria-pressed]="discountMode() === 'porcentaje'" (click)="discountMode.set('porcentaje')">Porcentaje %</button>
+                  </div>
+                </div>
+                <div class="row">
+                  <input id="desc" class="campo" style="width: 160px" dinero [placeholder]="discountMode() === 'valor' ? '0' : '0 %'" [(ngModel)]="discountInput" />
+                  @if (discount() > 0) { <span class="chico amarillo">Se descuentan {{ discount() | money }}</span> }
+                </div>
+                @if (discount() > 0) {
+                  <div>
+                    <label for="desc-motivo">Motivo del descuento</label>
+                    <input id="desc-motivo" class="campo" placeholder="Ej.: cliente frecuente, promoción, demora" [(ngModel)]="discountReason" />
+                  </div>
+                }
               </div>
 
               <div class="row">
@@ -271,13 +297,13 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
                 </div>
               }
 
-              <button class="btn primario grande" [disabled]="busy() || !method()" (click)="pay()">Confirmar pago y entregar</button>
+              <button class="btn primario grande" [disabled]="busy() || !method()" (click)="pay()">{{ ready() ? 'Confirmar pago y entregar' : 'Confirmar pago' }}</button>
               <p class="chico suave">Un cobro registrado no se borra. Si hay un error, se pide la anulación desde Caja.</p>
             </section>
           } @else {
             <section class="card main col">
               <p>Esta orden está en "{{ status[o.status] }}".</p>
-              <p class="suave">{{ o.payment_id ? 'Ya fue cobrada y entregada.' : 'Esta orden ya está cerrada.' }}</p>
+              <p class="suave">{{ o.payment_id ? 'Esta orden ya está pagada.' : 'Esta orden ya está cerrada.' }}</p>
               @if (o.payment_id) { <a class="btn primario" [routerLink]="['/comprobante', o.payment_id]">Ver comprobante</a> }
               <a class="btn" routerLink="/facturar">Volver a facturar</a>
             </section>
@@ -304,13 +330,22 @@ export class Cobro {
   protected cash = signal<number | null>(null);
   protected reference = signal('');
   protected busy = signal(false);
-  protected washers = signal<any[]>([]);
-  protected washerId = signal('');
 
   /** Se factura desde cualquier estado abierto, sin pasar por "Lista para entregar". */
+  protected ready = computed(() => ['READY', 'REVIEW'].includes(this.order()?.status));
   protected payable = computed(() => ['WAITING', 'WASHING', 'REVIEW', 'READY'].includes(this.order()?.status) && !this.order()?.payment_id);
-  /** Total a recibir: servicio más propina. */
-  protected due = computed(() => (this.order()?.total ?? 0) + (Number(this.tip()) || 0));
+  protected discountMode = signal<'valor' | 'porcentaje'>('valor');
+  protected discountInput = signal<number | null>(null);
+  protected discountReason = signal('');
+  /** Descuento en pesos, nunca mayor que el total. */
+  protected discount = computed(() => {
+    const total = this.order()?.total ?? 0;
+    const v = Number(this.discountInput()) || 0;
+    const pesos = this.discountMode() === 'porcentaje' ? Math.round((total * Math.min(v, 100)) / 100) : v;
+    return Math.min(Math.max(pesos, 0), total);
+  });
+  /** Total a recibir: servicio menos descuento, más propina. */
+  protected due = computed(() => (this.order()?.total ?? 0) - this.discount() + (Number(this.tip()) || 0));
   protected bills = computed(() => {
     const due = this.due();
     const options = [due, ...[20000, 50000, 100000, 200000].filter((b) => b > due)];
@@ -320,23 +355,24 @@ export class Cobro {
 
   constructor() {
     this.api.get('/orders/' + this.id).then((o) => this.order.set(o), this.toast.fail);
-    this.api.get('/users').then((u: any[]) => this.washers.set(u.filter((x) => x.role !== 'OWNER')), this.toast.fail);
   }
 
   async pay() {
     const cash = this.cash() === null ? this.due() : Number(this.cash());
-    if (!this.order()?.washer_id && !this.washerId()) return this.toast.show('Elige quién lavó la moto.', true);
     if (this.method() === 'EFECTIVO' && cash < this.due()) return this.toast.show('El efectivo recibido no alcanza.', true);
+    if (this.discount() > 0 && !this.discountReason().trim()) return this.toast.show('Escribe el motivo del descuento.', true);
     this.busy.set(true);
     try {
       const out = await this.api.post(`/orders/${this.id}/pay`, {
-        washerId: this.washerId() || null,
+        discount: this.discount(),
+        discountReason: this.discountReason(),
         method: this.method(),
         tip: Number(this.tip()) || 0,
         cashReceived: this.method() === 'EFECTIVO' ? cash : null,
         reference: this.reference(),
       });
-      this.toast.show(out.change > 0 ? `Cobro registrado. Devuelve ${money(out.change)}.` : 'Cobro registrado. Moto entregada.');
+      const done = out.delivered ? 'Moto entregada.' : 'La orden sigue su flujo.';
+      this.toast.show(out.change > 0 ? `Cobro registrado. Devuelve ${money(out.change)}. ${done}` : `Cobro registrado. ${done}`);
       this.router.navigateByUrl('/comprobante/' + out.paymentId);
     } catch (e) {
       this.toast.fail(e);

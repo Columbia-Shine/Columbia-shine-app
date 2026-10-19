@@ -140,7 +140,8 @@ operacion.get('/dashboard', auth(...MANAGERS), async (req, res) => {
     `select o.id, 'CS-' || lpad(o.number::text, 6, '0') as code, o.status, o.total, o.washer_id, b.plate, b.brand, b.model,
        s.name as service_name, s.max_minutes,
        extract(epoch from now() - coalesce(o.started_at, o.created_at))::int / 60 as minutes,
-       extract(epoch from now() - o.ready_at)::int / 60 as ready_minutes
+       extract(epoch from now() - o.ready_at)::int / 60 as ready_minutes,
+       exists (select 1 from payments p where p.order_id = o.id and ${VALID_PAYMENT}) as paid
      from orders o join bikes b on b.id = o.bike_id join services s on s.id = o.service_id
      where o.status in ('WAITING', 'WASHING', 'REVIEW', 'READY') order by o.created_at`,
   );

@@ -245,7 +245,7 @@ ordenes.post('/orders/:id/status', auth(...STAFF), async (req, res) => {
   const o = await loadOrder(String(req.params.id));
   const to = String(req.body?.status);
   // Sin revisión de entrega: al terminar el lavado la moto queda lista para entregar
-  need(['WAITING', 'WASHING', 'READY'].includes(to), 'Estado no válido.');
+  need(['WAITING', 'WASHING', 'READY', 'DELIVERED'].includes(to), 'Estado no válido.');
   need(['WAITING', 'WASHING', 'REVIEW', 'READY'].includes(o.status), 'Esta orden ya está cerrada.');
   if (req.user.role === 'WASHER') {
     need(o.washer_id === req.user.id, 'Esta moto no está asignada a ti.', 403);
@@ -253,11 +253,17 @@ ordenes.post('/orders/:id/status', auth(...STAFF), async (req, res) => {
     need(allowed, 'Ese cambio lo hace el administrador.', 403);
   }
   need(to === 'WAITING' || o.washer_id, 'Primero asigna un lavador.');
+  if (to === 'DELIVERED') {
+    // Entregar una moto que se cobró antes de terminar
+    need(o.status === 'READY', 'Primero pasa la moto a "Lista para entregar".');
+    need(o.payment_id, 'Primero cobra la moto.');
+  }
   await q(
     `update orders set status = $2,
        started_at = case when $2 = 'WASHING' then coalesce(started_at, now()) else started_at end,
        finished_at = case when $2 = 'READY' then coalesce(finished_at, now()) else finished_at end,
-       ready_at = case when $2 = 'READY' then now() else ready_at end
+       ready_at = case when $2 = 'READY' then now() else ready_at end,
+       delivered_at = case when $2 = 'DELIVERED' then now() else delivered_at end
      where id = $1`,
     [o.id, to],
   );
@@ -316,40 +322,37 @@ ordenes.post('/orders/:id/pay', auth(...MANAGERS), async (req, res) => {
     const locked = await one('select id from orders where id = $1 for update', [String(req.params.id)], c);
     need(locked, 'Orden no encontrada.', 404);
     const o = await loadOrder(locked.id, c);
-    // Se puede facturar desde cualquier estado abierto: la orden se cierra de una vez
+    // Se puede cobrar en cualquier estado abierto; solo se entrega de una vez si ya está lista
     need(['WAITING', 'WASHING', 'REVIEW', 'READY'].includes(o.status), 'Esta orden ya está cerrada.');
     need(!o.payment_id, 'Esta orden ya fue cobrada.', 409);
     const shift = await openShift(c);
     need(shift, 'No hay turno abierto. Abre la caja antes de cobrar.');
-    // La comisión sale del lavador de la orden: sin lavador no se cobra
-    let washerId: string | null = o.washer_id;
-    if (b.washerId) {
-      const w = await one(`select id from users where id = $1 and active and role in ('ADMIN', 'WASHER')`, [String(b.washerId)], c);
-      need(w, 'Ese lavador no está disponible.');
-      washerId = w.id;
-    }
-    need(washerId, 'Elige quién lavó la moto.');
+    const deliver = o.status === 'READY' || o.status === 'REVIEW';
+    // Descuento en pesos (la pantalla convierte el porcentaje); el cobro queda con el valor ya descontado
+    const discount = b.discount ? int(b.discount, 'El descuento') : 0;
+    need(discount <= o.total, 'El descuento no puede ser mayor que el total.');
+    const discountReason = discount ? text(b.discountReason, 'el motivo del descuento', 200) : null;
+    const amount = o.total - discount;
     let cash: number | null = null;
     if (method === 'EFECTIVO') {
-      const received = b.cashReceived === undefined || b.cashReceived === null ? o.total + tip : int(b.cashReceived, 'El efectivo recibido');
-      need(received >= o.total + tip, 'El efectivo recibido no alcanza.');
+      const received = b.cashReceived === undefined || b.cashReceived === null ? amount + tip : int(b.cashReceived, 'El efectivo recibido');
+      need(received >= amount + tip, 'El efectivo recibido no alcanza.');
       cash = received;
     }
     const p = await one(
-      `insert into payments (order_id, shift_id, method, amount, tip, cash_received, reference, created_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
-      [o.id, shift.id, method, o.total, tip, cash, optText(b.reference, 40), req.user.id],
+      `insert into payments (order_id, shift_id, method, amount, tip, cash_received, reference, created_by, discount, discount_reason)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+      [o.id, shift.id, method, amount, tip, cash, optText(b.reference, 40), req.user.id, discount, discountReason],
       c,
     );
-    // Los tiempos que no se marcaron quedan con la hora del cobro
-    await c.query(
-      `update orders set status = 'DELIVERED', delivered_at = now(), washer_id = $2,
-         started_at = coalesce(started_at, now()), finished_at = coalesce(finished_at, now()), ready_at = coalesce(ready_at, now())
-       where id = $1`,
-      [o.id, washerId],
+    // Si aún no está lista, la orden sigue su flujo y se entrega después con "Entregar"
+    if (deliver) await c.query(`update orders set status = 'DELIVERED', delivered_at = now() where id = $1`, [o.id]);
+    await audit(
+      req.user.id, 'COBRO', 'payment', p.id,
+      { orden: o.code, medio: method, valor: amount, propina: tip, estado: o.status, ...(discount ? { descuento: discount, motivo: discountReason } : {}) },
+      c,
     );
-    await audit(req.user.id, 'COBRO', 'payment', p.id, { orden: o.code, medio: method, valor: o.total, propina: tip, estado_previo: o.status }, c);
-    return { paymentId: p.id, change: cash === null ? 0 : cash - o.total - tip };
+    return { paymentId: p.id, change: cash === null ? 0 : cash - amount - tip, delivered: deliver };
   });
   res.status(201).json(out);
 });
@@ -359,7 +362,7 @@ ordenes.get('/payments', auth(...MANAGERS), async (req, res) => {
   // Con turno abierto se muestran sus cobros; sin turno, los de hoy
   const where = shift ? 'p.shift_id = $1' : `${localDate('p.created_at')} = ${TODAY} and $1::text is null`;
   const rows = await q(
-    `select p.id, p.method, p.amount, p.tip, p.created_at, p.void_status, p.void_reason,
+    `select p.id, p.method, p.amount, p.tip, p.discount, p.created_at, p.void_status, p.void_reason,
        'CS-' || lpad(o.number::text, 6, '0') as code, o.id as order_id, b.plate, s.name as service_name,
        u.name as created_by_name, r.name as void_requested_by_name
      from payments p
@@ -375,7 +378,7 @@ ordenes.get('/payments', auth(...MANAGERS), async (req, res) => {
 // Comprobante de venta de un cobro (no es factura electrónica)
 ordenes.get('/payments/:id/receipt', auth(...MANAGERS), async (req, res) => {
   const p = await one(
-    `select p.id, p.order_id, p.method, p.amount, p.tip, p.cash_received, p.reference, p.created_at, p.void_status,
+    `select p.id, p.order_id, p.method, p.amount, p.tip, p.discount, p.discount_reason, p.cash_received, p.reference, p.created_at, p.void_status,
        u.name as created_by_name
      from payments p join users u on u.id = p.created_by where p.id = $1`,
     [String(req.params.id)],

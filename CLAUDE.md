@@ -22,7 +22,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql, 002_usuarios.sql, 003_cliente_afan.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 004_descuento.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -71,7 +71,9 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 
 ## Flujo de una orden
 
-`WAITING` (En espera) → `WASHING` (En lavado) → `READY` (Lista para entregar) → `DELIVERED` (Entregada, al cobrar). También `CANCELLED`.
+`WAITING` (En espera) → `WASHING` (En lavado) → `READY` (Lista para entregar) → `DELIVERED` (Entregada). También `CANCELLED`.
+
+- **Cobrar y entregar son pasos separados.** Se puede cobrar en cualquier estado abierto y la orden sigue su flujo. Si se cobra estando `READY`, se entrega de una vez; si ya estaba pagada, al quedar `READY` sale el botón "Entregar" (`READY → DELIVERED` en `/orders/:id/status`, solo OWNER y ADMIN y solo con cobro activo).
 
 - Sin checklist ni revisión de entrega: se asigna lavador, se lava y al terminar queda lista para entregar.
 - El lavador solo hace WAITING→WASHING y WASHING→READY, y solo en sus órdenes.
@@ -106,11 +108,10 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 ## Reglas del negocio que no se deben romper
 
 - **Un cobro nunca se borra.** ADMIN pide la anulación (`void_status = REQUESTED`); OWNER aprueba o rechaza. Al aprobar, el cobro queda `APPROVED` (anulado) y la orden vuelve a `READY`.
-- Se cobra una orden abierta en **cualquier estado** (WAITING, WASHING o READY), desde la vista **Facturar** (`/facturar`), y solo con un **turno de caja abierto**. Un solo turno abierto a la vez.
-- Al cobrar, la orden pasa directo a `DELIVERED` y los tiempos que falten (`started_at`, `finished_at`, `ready_at`) quedan con la hora del cobro.
-- **Sin lavador no se cobra**: la comisión sale de `orders.washer_id`. Si la orden no tiene, se elige en la pantalla de cobro (`washerId` en `POST /orders/:id/pay`), solo ADMIN o WASHER.
+- Se cobra una orden abierta en **cualquier estado** (WAITING, WASHING o READY), desde la vista **Facturar** (`/facturar`), y solo con un **turno de caja abierto**. Un solo turno abierto a la vez. No se entrega sin cobro.
+- **Descuento** al cobrar, en pesos o porcentaje (la pantalla lo convierte a pesos), con motivo obligatorio. `payments.amount` queda con el valor ya descontado y `payments.discount` / `discount_reason` guardan el descuento: ventas, caja y comisión usan lo que de verdad se cobró. Sale en el comprobante y en `audit_log`.
 - Una orden con cobro activo no se puede cancelar ni modificar.
-- **Comisión: 45%** del total de cada orden que lavó la persona (incluye adicionales). Valor en `settings.commission_pct`. Sin base fija en el sistema: la base temporal de Gregorio la maneja el dueño por fuera.
+- **Comisión: 45%** de lo cobrado en cada orden que lavó la persona (incluye adicionales, descontado el descuento si lo hubo). Valor en `settings.commission_pct`. Sin base fija en el sistema: la base temporal de Gregorio la maneja el dueño por fuera.
 - Propinas: se reparten por igual entre quienes lavaron en el turno.
 - Efectivo esperado = base + ventas y propinas en efectivo + entradas − gastos − retiros. Al cerrar, si hay diferencia, la explicación es obligatoria.
 - Adicionales "desde" (óxido, desmanchado): se pueden cobrar por encima del precio base, nunca por debajo.

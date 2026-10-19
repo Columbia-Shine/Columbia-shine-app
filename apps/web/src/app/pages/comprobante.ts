@@ -42,7 +42,11 @@ import { Api, METHOD_NAMES, money, MoneyPipe, Toast, WhenPipe } from '../core';
             <div class="fila"><span>{{ i.name }}</span><span class="num">{{ i.price | money }}</span></div>
           }
           <div class="linea"></div>
-          <div class="fila"><span>Subtotal servicios</span><span class="num">{{ d.payment.amount | money }}</span></div>
+          @if (d.payment.discount) {
+            <div class="fila"><span>Subtotal</span><span class="num">{{ d.payment.amount + d.payment.discount | money }}</span></div>
+            <div class="fila"><span>Descuento @if (d.payment.discount_reason) { ({{ d.payment.discount_reason }}) }</span><span class="num">−{{ d.payment.discount | money }}</span></div>
+          }
+          <div class="fila"><span>Total servicios</span><span class="num">{{ d.payment.amount | money }}</span></div>
           @if (d.payment.tip) { <div class="fila"><span>Propina</span><span class="num">{{ d.payment.tip | money }}</span></div> }
           <div class="fila total"><span>Total pagado</span><span class="num">{{ paid() | money }}</span></div>
           <div class="fila"><span>Medio de pago</span><span>{{ methods[d.payment.method] }}</span></div>
@@ -94,6 +98,7 @@ export class Comprobante {
       `*Columbia Shine* · Comprobante ${o.code}`,
       `Placa ${o.plate}`,
       ...o.items.map((i: any) => `${i.name}: ${money(i.price)}`),
+      ...(p.discount ? [`Descuento: −${money(p.discount)}`] : []),
       ...(p.tip ? [`Propina: ${money(p.tip)}`] : []),
       `*Total pagado: ${money(this.paid())}* (${this.methods[p.method]})`,
       '¡Gracias por tu visita! Pasión por tu máquina.',

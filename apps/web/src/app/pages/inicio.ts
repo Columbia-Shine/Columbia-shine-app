@@ -134,6 +134,8 @@ export class Inicio implements OnDestroy {
       const bike = `${o.code} · ${o.plate} · ${o.service_name}`;
       if (o.status === 'WASHING' && o.max_minutes && o.minutes > o.max_minutes) {
         out.push({ tag: 'Demorada', tone: 'amarilla', title: bike, detail: `Lleva ${o.minutes} min en lavado. El tiempo objetivo es ${o.max_minutes} min.`, action: 'Ver orden', link: '/ordenes/' + o.id });
+      } else if (o.status === 'READY' && o.paid) {
+        out.push({ tag: 'Por entregar', tone: 'aqua', title: bike, detail: `Pagada y lista hace ${o.ready_minutes ?? 0} min.`, action: 'Entregar', link: '/ordenes/' + o.id });
       } else if (o.status === 'READY') {
         out.push({ tag: 'Por cobrar', tone: 'aqua', title: bike, detail: `Lista hace ${o.ready_minutes ?? 0} min. Total ${this.fmt(o.total)}.`, action: 'Cobrar', link: '/cobro/' + o.id });
       } else if (o.status === 'WAITING' && !o.washer_id) {
@@ -143,7 +145,7 @@ export class Inicio implements OnDestroy {
     return out;
   });
 
-  protected readyAmount = computed(() => (this.data()?.active ?? []).filter((o: any) => o.status === 'READY').reduce((a: number, o: any) => a + o.total, 0));
+  protected readyAmount = computed(() => (this.data()?.active ?? []).filter((o: any) => o.status === 'READY' && !o.paid).reduce((a: number, o: any) => a + o.total, 0));
 
   constructor() {
     this.load();
