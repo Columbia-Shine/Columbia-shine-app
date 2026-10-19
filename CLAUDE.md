@@ -101,7 +101,8 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 ## Comprobante de venta
 
 - `/comprobante/:paymentId` (OWNER y ADMIN): comprobante imprimible de un cobro, con logo, placa, servicios, descuento, propina, medio de pago, recibido y cambio.
-- "Enviar imagen por WhatsApp": el comprobante se convierte en PNG en el navegador con `html-to-image` (se prepara al abrir, porque iPhone exige compartir justo al tocar) y se comparte con `navigator.share`; en computador se descarga. Un enlace `wa.me` no puede llevar imágenes, solo texto (queda como alternativa "Enviar como texto"). Si el cobro fue anulado sale la marca "ANULADO".
+- "Enviar imagen por WhatsApp": `comprobante-imagen.ts` dibuja el comprobante a mano en un canvas (logo, textos, filas) y lo comparte como PNG con `navigator.share`; en computador se descarga. Se prepara al abrir, porque iPhone exige compartir justo al tocar.
+- **No convertir el HTML a imagen** (html-to-image y similares): Safari no pinta el logo ni la letra. Para el canvas se usan los archivos fijos de Montserrat de `public/fonts` (500, 700 y 800 itálica, licencia OFL) con el nombre `MontserratRecibo`, porque la Montserrat variable de Google sale delgadísima en el canvas de Safari. Si cambia el comprobante en pantalla, cambiar también el dibujo. Un enlace `wa.me` no puede llevar imágenes, solo texto (queda como alternativa "Enviar como texto"). Si el cobro fue anulado sale la marca "ANULADO".
 - Se abre solo al terminar un cobro; también desde la orden ("Ver comprobante") y desde Caja.
 - **No es factura electrónica** y así lo dice el pie. La factura DIAN con Factus sigue pendiente.
 - Al imprimir, `@media print` de `styles.css` oculta la barra superior y todo lo que tenga la clase `.no-imprimir`.

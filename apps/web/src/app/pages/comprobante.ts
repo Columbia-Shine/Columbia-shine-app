@@ -1,7 +1,7 @@
-import { Component, computed, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { toBlob } from 'html-to-image';
 import { Api, METHOD_NAMES, money, MoneyPipe, Toast, WhenPipe } from '../core';
+import { receiptImage } from './comprobante-imagen';
 
 /** Comprobante de venta de un cobro: para imprimir o enviar por WhatsApp. No es factura electrónica. */
 @Component({
@@ -22,7 +22,7 @@ import { Api, METHOD_NAMES, money, MoneyPipe, Toast, WhenPipe } from '../core';
           ¿No funciona? <a [href]="whatsapp()" target="_blank" rel="noopener">Enviar como texto</a>
         </p>
 
-        <article #recibo class="recibo" aria-label="Comprobante de venta">
+        <article class="recibo" aria-label="Comprobante de venta">
           @if (d.payment.void_status === 'APPROVED') {
             <div class="anulado">ANULADO</div>
           }
@@ -114,32 +114,19 @@ export class Comprobante {
     return `https://wa.me/${to}?text=${encodeURIComponent(lines.join('\n'))}`;
   });
 
-  private receipt = viewChild<ElementRef<HTMLElement>>('recibo');
   /** El comprobante como imagen PNG, listo antes del toque para que el celular deje compartirlo. */
   protected image = signal<File | null>(null);
 
   constructor() {
     this.api.get(`/payments/${this.id}/receipt`).then(async (d) => {
       this.data.set(d);
-      await this.renderImage();
+      try {
+        const blob = await receiptImage(d, this.methods);
+        this.image.set(new File([blob], `comprobante-${d.order.code}.png`, { type: 'image/png' }));
+      } catch {
+        this.toast.show('No se pudo preparar la imagen. Usa "Enviar como texto".', true);
+      }
     }, this.toast.fail);
-  }
-
-  private async renderImage() {
-    // Espera a que el comprobante se pinte y cargue el logo
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const el = this.receipt()?.nativeElement;
-    if (!el) return;
-    await Promise.all([...el.querySelectorAll('img')].map((img) => img.decode().catch(() => undefined)));
-    const options = { pixelRatio: 2, backgroundColor: '#ffffff' };
-    let blob: Blob | null = null;
-    try {
-      blob = await toBlob(el, options);
-    } catch {
-      // Si la fuente de Google no se deja incrustar, se hace con la letra del sistema
-      blob = await toBlob(el, { ...options, skipFonts: true }).catch(() => null);
-    }
-    if (blob) this.image.set(new File([blob], `comprobante-${this.data().order.code}.png`, { type: 'image/png' }));
   }
 
   /** Abre el menú de compartir del celular con la imagen; en computador la descarga. */
