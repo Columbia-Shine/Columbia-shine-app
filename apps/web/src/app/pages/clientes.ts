@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Api, minutesSince, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../core';
 
 @Component({
@@ -19,7 +20,10 @@ import { Api, minutesSince, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../
           <tbody>
             @for (c of customers(); track c.id) {
               <tr>
-                <td><a class="fuerte" [routerLink]="['/clientes', c.id]">{{ c.name }}</a></td>
+                <td>
+                  <a class="fuerte" [routerLink]="['/clientes', c.id]">{{ c.name }}</a>
+                  @if (c.pending) { <span class="etiqueta amarilla" style="margin-left: 8px">Datos pendientes</span> }
+                </td>
                 <td>{{ c.phone || '—' }}</td>
                 <td>{{ c.plates || '—' }}</td>
                 <td class="der">{{ c.visits }}</td>
@@ -77,6 +81,10 @@ export class Clientes {
             <button class="btn" (click)="editing.set(!editing())">{{ editing() ? 'Cerrar' : 'Editar datos' }}</button>
           </div>
         </div>
+
+        @if (d.customer.pending) {
+          <div class="aviso"><span class="fuerte amarillo">Cliente de afán.</span> Se recibió solo con la placa. Completa su nombre y celular; si el celular ya es de otro cliente, se unen y la placa queda con su historial.</div>
+        }
 
         @if (editing()) {
           <section class="card col">
@@ -144,7 +152,9 @@ export class Clientes {
 export class Cliente {
   private api = inject(Api);
   private toast = inject(Toast);
-  private id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private id = '';
 
   protected names = STATUS_NAMES;
   protected data = signal<any | null>(null);
@@ -167,7 +177,13 @@ export class Cliente {
   });
 
   constructor() {
-    this.load();
+    // La misma pantalla se reutiliza al pasar de un cliente a otro (por ejemplo, al unirlos)
+    this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((p) => {
+      this.id = p.get('id')!;
+      this.data.set(null);
+      this.editing.set(false);
+      this.load();
+    });
   }
 
   describe = (o: any): string => o.items.map((i: any) => i.name).join(' + ');
@@ -175,7 +191,8 @@ export class Cliente {
   private load() {
     this.api.get('/customers/' + this.id).then((d) => {
       this.data.set(d);
-      this.name.set(d.customer.name);
+      if (d.customer.pending) this.editing.set(true);
+      this.name.set(d.customer.pending ? '' : d.customer.name);
       this.phone.set(d.customer.phone ?? '');
       this.email.set(d.customer.email ?? '');
       this.document.set(d.customer.document ?? '');
@@ -184,9 +201,15 @@ export class Cliente {
 
   async save() {
     try {
-      await this.api.patch('/customers/' + this.id, { name: this.name(), phone: this.phone(), email: this.email(), document: this.document() });
-      this.toast.show('Datos guardados.');
+      const out = await this.api.patch('/customers/' + this.id, { name: this.name(), phone: this.phone(), email: this.email(), document: this.document() });
       this.editing.set(false);
+      if (out.id !== this.id) {
+        // Se unió a un cliente que ya existía con ese celular
+        this.toast.show('Ese celular ya era de un cliente: se unieron y la placa quedó en su historial.');
+        this.router.navigateByUrl('/clientes/' + out.id);
+        return;
+      }
+      this.toast.show('Datos guardados.');
       this.load();
     } catch (e) {
       this.toast.fail(e);

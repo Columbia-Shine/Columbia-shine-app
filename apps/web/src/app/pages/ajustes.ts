@@ -17,6 +17,7 @@ const PERMISSIONS: [string, string, string, string][] = [
 
 const ACTIONS: Record<string, string> = {
   ORDEN_CREADA: 'Creó una orden', ORDEN_ASIGNADA: 'Asignó lavador', ORDEN_ESTADO: 'Cambió el estado', ORDEN_CANCELADA: 'Canceló una orden',
+  CLIENTE_COMPLETADO: 'Completó datos de cliente de afán', CLIENTE_UNIDO: 'Unió cliente de afán con uno existente',
   ADICIONAL_AGREGADO: 'Agregó un adicional', ADICIONAL_QUITADO: 'Quitó un adicional', COBRO: 'Registró un cobro',
   ANULACION_SOLICITADA: 'Pidió anular un cobro', COBRO_ANULADO: 'Anuló un cobro', ANULACION_RECHAZADA: 'Rechazó una anulación',
   TURNO_ABIERTO: 'Abrió turno', TURNO_CERRADO: 'Cerró turno', MOVIMIENTO_CAJA: 'Movimiento de caja',

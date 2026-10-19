@@ -22,7 +22,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql, 002_usuarios.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql, 002_usuarios.sql, 003_cliente_afan.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -78,6 +78,13 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - `REVIEW` sigue en el CHECK de la tabla `orders` por compatibilidad, pero ya no se usa (la API lo rechaza como destino).
 - Para iniciar el lavado debe haber lavador asignado. Solo lavan los usuarios ADMIN y WASHER: al propietario nunca se le asigna una moto (lo valida la API).
 - Número de orden: `CS-000001` (secuencia `order_number_seq`).
+
+## Cliente de afán
+
+- En recepción, una moto nueva se puede recibir "solo con la placa" (`rush: true` en `POST /orders`): se crea un cliente propio "Sin registrar" con `customers.pending = true`. Uno por moto, no uno compartido, para que el historial siga a la placa.
+- Cuando vuelve, al escribir la placa la recepción avisa y deja completar nombre y celular; también se completa en la ficha del cliente (abre el formulario solo).
+- `completeCustomer()` en `routes-ordenes.ts`: si el celular ya es de otro cliente y el actual es de afán, los une (motos, órdenes y reservas pasan al existente y el de afán se borra). Con un cliente normal, un celular repetido sigue siendo error.
+- Queda en `audit_log` como `CLIENTE_COMPLETADO` o `CLIENTE_UNIDO`.
 
 ## Reglas del negocio que no se deben romper
 

@@ -31,10 +31,28 @@ const MAX_PHOTOS = 6;
                 <span class="etiqueta azul">Moto nueva: completa los datos</span>
               }
             </div>
+            @if (bike()?.customer_pending) {
+              <div class="aviso col" style="gap: 10px">
+                <div><span class="fuerte amarillo">Cliente de afán:</span> esta placa no tiene los datos del cliente. Si ahora tiene tiempo, complétalos (opcional).</div>
+                <div class="grid">
+                  <div><label for="pn">Nombre del cliente</label><input id="pn" class="campo" [(ngModel)]="customerName" autocomplete="off" /></div>
+                  <div><label for="pp">Celular</label><input id="pp" class="campo" type="tel" inputmode="numeric" [(ngModel)]="customerPhone" autocomplete="off" /></div>
+                </div>
+              </div>
+            }
             @if (searched() && !bike()) {
+              <div class="row">
+                <button class="pastilla" [attr.aria-pressed]="!rush()" (click)="rush.set(false)">Con datos del cliente</button>
+                <button class="pastilla" [attr.aria-pressed]="rush()" (click)="rush.set(true)">Cliente de afán: solo placa</button>
+              </div>
+              @if (rush()) {
+                <p class="chico suave">Se registra con la placa como "Sin registrar". Cuando vuelva, al escribir la placa aquí se completan sus datos y queda con todo su historial.</p>
+              }
               <div class="grid">
-                <div><label for="cn">Nombre del cliente</label><input id="cn" class="campo" [(ngModel)]="customerName" autocomplete="off" /></div>
-                <div><label for="cp">Celular</label><input id="cp" class="campo" type="tel" inputmode="numeric" [(ngModel)]="customerPhone" autocomplete="off" /></div>
+                @if (!rush()) {
+                  <div><label for="cn">Nombre del cliente</label><input id="cn" class="campo" [(ngModel)]="customerName" autocomplete="off" /></div>
+                  <div><label for="cp">Celular</label><input id="cp" class="campo" type="tel" inputmode="numeric" [(ngModel)]="customerPhone" autocomplete="off" /></div>
+                }
                 <div><label for="br">Marca</label><input id="br" class="campo" [(ngModel)]="brand" /></div>
                 <div><label for="mo">Modelo</label><input id="mo" class="campo" [(ngModel)]="model" /></div>
                 <div><label for="co">Color</label><input id="co" class="campo" [(ngModel)]="color" /></div>
@@ -132,6 +150,8 @@ export class Recepcion {
   protected plate = signal('');
   protected bike = signal<any | null>(null);
   protected searched = signal(false);
+  /** Cliente de afán: la moto nueva se recibe solo con la placa */
+  protected rush = signal(false);
   protected customerName = signal('');
   protected customerPhone = signal('');
   protected brand = signal('');
@@ -213,6 +233,7 @@ export class Recepcion {
     try {
       const order = await this.api.post('/orders', {
         plate: this.plate(),
+        rush: !this.bike() && this.rush(),
         customerName: this.customerName(),
         customerPhone: this.customerPhone(),
         brand: this.brand(),

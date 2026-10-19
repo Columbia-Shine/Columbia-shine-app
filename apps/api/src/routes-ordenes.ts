@@ -8,7 +8,7 @@ const ORDER_SELECT = `
   select o.id, 'CS-' || lpad(o.number::text, 6, '0') as code, o.status, o.total, o.notes,
     o.created_at, o.started_at, o.finished_at, o.ready_at, o.delivered_at, o.cancel_reason,
     b.id as bike_id, b.plate, b.brand, b.model, b.color,
-    c.id as customer_id, c.name as customer_name, c.phone as customer_phone,
+    c.id as customer_id, c.name as customer_name, c.phone as customer_phone, c.pending as customer_pending,
     s.name as service_name, s.min_minutes, s.max_minutes, s.steps,
     w.id as washer_id, w.name as washer_name,
     (select coalesce(json_agg(json_build_object('id', i.id, 'name', i.name, 'price', i.price, 'kind', i.kind) order by i.kind, i.name), '[]'::json)
@@ -38,10 +38,41 @@ export async function openShift(db: Db = pool) {
 
 // ---- Clientes y motos ----
 
+const PENDING_NAME = 'Sin registrar';
+
+/**
+ * Completa los datos de un cliente. Si es de afán y el celular ya es de otro cliente,
+ * los une: motos, órdenes y reservas pasan al cliente existente. Devuelve el id que queda.
+ */
+async function completeCustomer(id: string, data: Record<string, unknown>, userId: string, db: Db): Promise<string> {
+  const cur = await one('select * from customers where id = $1 for update', [id], db);
+  need(cur, 'Cliente no encontrado.', 404);
+  const name = text(data.name, 'el nombre', 80);
+  const phone = normPhone(data.phone) || null;
+  need(!phone || phone.length === 10, 'El celular debe tener 10 dígitos.');
+  const other = phone ? await one('select id, name from customers where phone = $1 and id <> $2', [phone, id], db) : undefined;
+  if (other) {
+    need(cur.pending, 'Otro cliente ya tiene ese celular.', 409);
+    for (const table of ['bikes', 'orders', 'bookings']) {
+      await db.query(`update ${table} set customer_id = $2 where customer_id = $1`, [id, other.id]);
+    }
+    await db.query('delete from customers where id = $1', [id]);
+    await audit(userId, 'CLIENTE_UNIDO', 'customer', other.id, { cliente: other.name, celular: phone }, db);
+    return other.id;
+  }
+  await db.query('update customers set name = $2, phone = $3, email = $4, document = $5, pending = false where id = $1', [
+    id, name, phone,
+    data.email === undefined ? cur.email : optText(data.email, 120),
+    data.document === undefined ? cur.document : optText(data.document, 30),
+  ]);
+  if (cur.pending) await audit(userId, 'CLIENTE_COMPLETADO', 'customer', id, { cliente: name, celular: phone }, db);
+  return id;
+}
+
 ordenes.get('/bikes/lookup', auth(...MANAGERS), async (req, res) => {
   const plate = normPlate(req.query.plate);
   const bike = await one(
-    `select b.*, c.name as customer_name, c.phone as customer_phone,
+    `select b.*, c.name as customer_name, c.phone as customer_phone, c.pending as customer_pending,
        (select count(*) from orders o where o.bike_id = b.id and o.status = 'DELIVERED') as visits,
        (select json_build_object('service', s.name, 'date', o.delivered_at)
           from orders o join services s on s.id = o.service_id
@@ -56,7 +87,7 @@ ordenes.get('/customers', auth(...MANAGERS), async (req, res) => {
   const term = `%${String(req.query.q ?? '').trim()}%`;
   res.json(
     await q(
-      `select c.id, c.name, c.phone,
+      `select c.id, c.name, c.phone, c.pending,
          (select string_agg(b.plate, ', ') from bikes b where b.customer_id = c.id) as plates,
          count(o.id) filter (where o.status = 'DELIVERED') as visits,
          coalesce(sum(o.total) filter (where o.status = 'DELIVERED'), 0) as spent,
@@ -79,13 +110,8 @@ ordenes.get('/customers/:id', auth(...MANAGERS), async (req, res) => {
 });
 
 ordenes.patch('/customers/:id', auth(...MANAGERS), async (req, res) => {
-  const b = req.body ?? {};
-  const phone = normPhone(b.phone) || null;
-  need(!phone || !(await one('select 1 from customers where phone = $1 and id <> $2', [phone, req.params.id])), 'Otro cliente ya tiene ese celular.', 409);
-  await q('update customers set name = $2, phone = $3, email = $4, document = $5 where id = $1', [
-    req.params.id, text(b.name, 'el nombre', 80), phone, optText(b.email, 120), optText(b.document, 30),
-  ]);
-  res.json({ ok: true });
+  const id = await tx((c) => completeCustomer(String(req.params.id), req.body ?? {}, req.user.id, c));
+  res.json({ ok: true, id });
 });
 
 // Motos del cliente que agenda desde su celular
@@ -143,12 +169,22 @@ ordenes.post('/orders', auth(...MANAGERS), async (req, res) => {
   const photos: string[] = Array.isArray(b.photos) ? b.photos.slice(0, MAX_PHOTOS) : [];
 
   const id = await tx(async (c) => {
-    let bike = await one('select * from bikes where plate = $1', [plate], c);
+    let bike = await one('select b.*, c.pending from bikes b join customers c on c.id = b.customer_id where b.plate = $1', [plate], c);
+    if (bike?.pending && optText(b.customerName, 80)) {
+      // Volvió el cliente de afán: se completan sus datos al recibir la moto
+      bike.customer_id = await completeCustomer(bike.customer_id, { name: b.customerName, phone: b.customerPhone }, req.user.id, c);
+    }
     if (!bike) {
-      const name = text(b.customerName, 'el nombre del cliente', 80);
-      const phone = normPhone(b.customerPhone) || null;
-      let customer = phone ? await one('select id from customers where phone = $1', [phone], c) : undefined;
-      if (!customer) customer = await one('insert into customers (name, phone) values ($1, $2) returning id', [name, phone], c);
+      let customer: { id: string };
+      if (b.rush === true) {
+        customer = (await one('insert into customers (name, pending) values ($1, true) returning id', [PENDING_NAME], c))!;
+      } else {
+        const name = text(b.customerName, 'el nombre del cliente', 80);
+        const phone = normPhone(b.customerPhone) || null;
+        customer =
+          (phone ? await one('select id from customers where phone = $1', [phone], c) : undefined) ??
+          (await one('insert into customers (name, phone) values ($1, $2) returning id', [name, phone], c))!;
+      }
       bike = await one(
         'insert into bikes (customer_id, plate, brand, model, color, year) values ($1, $2, $3, $4, $5, $6) returning *',
         [customer.id, plate, optText(b.brand, 40), optText(b.model, 40), optText(b.color, 30), b.year ? int(b.year, 'El año', 1950) : null],
