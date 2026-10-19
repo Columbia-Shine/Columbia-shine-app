@@ -1,5 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { toBlob } from 'html-to-image';
 import { Api, METHOD_NAMES, money, MoneyPipe, Toast, WhenPipe } from '../core';
 
 /** Comprobante de venta de un cobro: para imprimir o enviar por WhatsApp. No es factura electrónica. */
@@ -9,13 +10,19 @@ import { Api, METHOD_NAMES, money, MoneyPipe, Toast, WhenPipe } from '../core';
   template: `
     <main class="page narrow">
       @if (data(); as d) {
-        <div class="row no-imprimir">
-          <button class="btn primario grow" (click)="print()">Imprimir</button>
-          <a class="btn grow" [href]="whatsapp()" target="_blank" rel="noopener">Enviar por WhatsApp</a>
-          <a class="btn grow" routerLink="/ordenes">Volver a órdenes</a>
+        <div class="col no-imprimir" style="gap: 10px">
+          <button class="btn primario grande" [disabled]="!image()" (click)="share()">{{ image() ? 'Enviar imagen por WhatsApp' : 'Preparando imagen…' }}</button>
+          <div class="row">
+            <button class="btn grow" (click)="print()">Imprimir</button>
+            <a class="btn grow" routerLink="/facturar">Volver a facturar</a>
+          </div>
         </div>
+        <p class="chico suave no-imprimir" style="text-align: center">
+          En el celular se abre el menú de compartir: elige WhatsApp y el contacto.
+          ¿No funciona? <a [href]="whatsapp()" target="_blank" rel="noopener">Enviar como texto</a>
+        </p>
 
-        <article class="recibo" aria-label="Comprobante de venta">
+        <article #recibo class="recibo" aria-label="Comprobante de venta">
           @if (d.payment.void_status === 'APPROVED') {
             <div class="anulado">ANULADO</div>
           }
@@ -74,7 +81,7 @@ import { Api, METHOD_NAMES, money, MoneyPipe, Toast, WhenPipe } from '../core';
     .linea { margin: 10px 0; border-top: 1px dashed #000; }
     .fila { display: flex; justify-content: space-between; gap: 12px; }
     .fila span:last-child { text-align: right; }
-    .total { margin-top: 4px; font-size: 18px; font-weight: 800; }
+    .recibo .total { margin-top: 4px; font-size: 18px; font-weight: 800; color: #000; }
     .chiquito { font-size: 11px; }
     .anulado { position: absolute; top: 40%; left: 0; right: 0; text-align: center; font-size: 48px; font-weight: 800; color: rgba(200, 0, 0, 0.35); transform: rotate(-20deg); pointer-events: none; }
   `,
@@ -107,8 +114,53 @@ export class Comprobante {
     return `https://wa.me/${to}?text=${encodeURIComponent(lines.join('\n'))}`;
   });
 
+  private receipt = viewChild<ElementRef<HTMLElement>>('recibo');
+  /** El comprobante como imagen PNG, listo antes del toque para que el celular deje compartirlo. */
+  protected image = signal<File | null>(null);
+
   constructor() {
-    this.api.get(`/payments/${this.id}/receipt`).then((d) => this.data.set(d), this.toast.fail);
+    this.api.get(`/payments/${this.id}/receipt`).then(async (d) => {
+      this.data.set(d);
+      await this.renderImage();
+    }, this.toast.fail);
+  }
+
+  private async renderImage() {
+    // Espera a que el comprobante se pinte y cargue el logo
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const el = this.receipt()?.nativeElement;
+    if (!el) return;
+    await Promise.all([...el.querySelectorAll('img')].map((img) => img.decode().catch(() => undefined)));
+    const options = { pixelRatio: 2, backgroundColor: '#ffffff' };
+    let blob: Blob | null = null;
+    try {
+      blob = await toBlob(el, options);
+    } catch {
+      // Si la fuente de Google no se deja incrustar, se hace con la letra del sistema
+      blob = await toBlob(el, { ...options, skipFonts: true }).catch(() => null);
+    }
+    if (blob) this.image.set(new File([blob], `comprobante-${this.data().order.code}.png`, { type: 'image/png' }));
+  }
+
+  /** Abre el menú de compartir del celular con la imagen; en computador la descarga. */
+  async share() {
+    const file = this.image();
+    if (!file) return;
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'Comprobante Columbia Shine' });
+      } catch (e: any) {
+        if (e?.name !== 'AbortError') this.toast.show('No se pudo compartir. Descarga la imagen e intenta de nuevo.', true);
+      }
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(url);
+    this.toast.show('Imagen descargada. Adjúntala en WhatsApp.');
   }
 
   print() {
