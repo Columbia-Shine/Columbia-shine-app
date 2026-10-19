@@ -42,14 +42,39 @@ const MAX_PHOTOS = 6;
             }
             @if (searched() && !bike()) {
               <div class="row">
-                <button class="pastilla" [attr.aria-pressed]="!rush()" (click)="rush.set(false)">Con datos del cliente</button>
-                <button class="pastilla" [attr.aria-pressed]="rush()" (click)="rush.set(true)">Cliente de afán: solo placa</button>
+                <button class="pastilla" [attr.aria-pressed]="mode() === 'nuevo'" (click)="setMode('nuevo')">Cliente nuevo</button>
+                <button class="pastilla" [attr.aria-pressed]="mode() === 'existente'" (click)="setMode('existente')">Ya es cliente: otra moto</button>
+                <button class="pastilla" [attr.aria-pressed]="mode() === 'afan'" (click)="setMode('afan')">Cliente de afán: solo placa</button>
               </div>
-              @if (rush()) {
+              @if (mode() === 'afan') {
                 <p class="chico suave">Se registra con la placa como "Sin registrar". Cuando vuelva, al escribir la placa aquí se completan sus datos y queda con todo su historial.</p>
               }
+              @if (mode() === 'existente') {
+                @if (owner(); as c) {
+                  <div class="tile row">
+                    <div class="grow">
+                      <div class="fuerte">{{ c.name }}</div>
+                      <div class="chico suave">{{ c.phone || 'Sin celular' }} @if (c.plates) { · motos: {{ c.plates }} }</div>
+                    </div>
+                    <button class="btn chico" (click)="owner.set(null)">Cambiar</button>
+                  </div>
+                } @else {
+                  <div>
+                    <label for="bc">Buscar cliente por nombre, celular o placa</label>
+                    <input id="bc" class="campo" type="search" autocomplete="off" [ngModel]="ownerTerm()" (ngModelChange)="searchOwner($event)" />
+                  </div>
+                  @for (c of ownerResults(); track c.id) {
+                    <button class="opcion row between" (click)="owner.set(c)">
+                      <span class="fuerte">{{ c.name }}</span>
+                      <span class="chico suave">{{ c.phone || 'Sin celular' }} @if (c.plates) { · {{ c.plates }} }</span>
+                    </button>
+                  } @empty {
+                    @if (ownerTerm().trim().length >= 2) { <p class="chico suave">Ningún cliente coincide. Revisa o elige "Cliente nuevo".</p> }
+                  }
+                }
+              }
               <div class="grid">
-                @if (!rush()) {
+                @if (mode() === 'nuevo') {
                   <div><label for="cn">Nombre del cliente</label><input id="cn" class="campo" [(ngModel)]="customerName" autocomplete="off" /></div>
                   <div><label for="cp">Celular</label><input id="cp" class="campo" type="tel" inputmode="numeric" [(ngModel)]="customerPhone" autocomplete="off" /></div>
                 }
@@ -150,8 +175,12 @@ export class Recepcion {
   protected plate = signal('');
   protected bike = signal<any | null>(null);
   protected searched = signal(false);
-  /** Cliente de afán: la moto nueva se recibe solo con la placa */
-  protected rush = signal(false);
+  /** De quién es una moto nueva: cliente nuevo, uno que ya existe (otra moto suya) o de afán (solo placa) */
+  protected mode = signal<'nuevo' | 'existente' | 'afan'>('nuevo');
+  protected owner = signal<any | null>(null);
+  protected ownerTerm = signal('');
+  protected ownerResults = signal<any[]>([]);
+  private ownerTimer: ReturnType<typeof setTimeout> | undefined;
   protected customerName = signal('');
   protected customerPhone = signal('');
   protected brand = signal('');
@@ -204,6 +233,27 @@ export class Recepcion {
     }, 350);
   }
 
+  setMode(mode: 'nuevo' | 'existente' | 'afan') {
+    this.mode.set(mode);
+    this.owner.set(null);
+  }
+
+  searchOwner(value: string) {
+    this.ownerTerm.set(value);
+    clearTimeout(this.ownerTimer);
+    const term = value.trim();
+    if (term.length < 2) return this.ownerResults.set([]);
+    this.ownerTimer = setTimeout(async () => {
+      try {
+        const found: any[] = await this.api.get('/customers?q=' + encodeURIComponent(term));
+        // Los clientes de afán no se ofrecen: todavía no tienen datos
+        if (this.ownerTerm().trim() === term) this.ownerResults.set(found.filter((c) => !c.pending).slice(0, 6));
+      } catch (e) {
+        this.toast.fail(e);
+      }
+    }, 300);
+  }
+
   toggleExtra(id: string) {
     this.extraIds.update((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   }
@@ -229,11 +279,14 @@ export class Recepcion {
     if (this.plate().length < 5) return this.toast.show('Escribe la placa.', true);
     if (!this.searched()) return this.toast.show('Espera un momento: estamos buscando la placa.', true);
     if (!this.serviceId()) return this.toast.show('Elige el servicio.', true);
+    const isNew = !this.bike();
+    if (isNew && this.mode() === 'existente' && !this.owner()) return this.toast.show('Busca y elige el cliente dueño de la moto.', true);
     this.busy.set(true);
     try {
       const order = await this.api.post('/orders', {
         plate: this.plate(),
-        rush: !this.bike() && this.rush(),
+        rush: isNew && this.mode() === 'afan',
+        customerId: isNew && this.mode() === 'existente' ? this.owner()?.id : null,
         customerName: this.customerName(),
         customerPhone: this.customerPhone(),
         brand: this.brand(),

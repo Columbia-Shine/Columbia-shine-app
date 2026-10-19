@@ -98,6 +98,7 @@ import { Api, METHOD_NAMES, minutesSince, money, MoneyInput, MoneyPipe, STATUS_N
               </div>
             }
             <div class="row between sep"><span class="fuerte">Total</span><span class="total">{{ o.total | money }}</span></div>
+            @if (o.payment_id) { <a class="btn" [routerLink]="['/comprobante', o.payment_id]">Ver comprobante</a> }
             @if (editable()) {
               <div class="sep col">
                 <label for="extra" style="margin: 0">Agregar adicional</label>
@@ -312,7 +313,7 @@ export class Cobro {
         reference: this.reference(),
       });
       this.toast.show(out.change > 0 ? `Cobro registrado. Devuelve ${money(out.change)}.` : 'Cobro registrado. Moto entregada.');
-      this.router.navigateByUrl('/ordenes');
+      this.router.navigateByUrl('/comprobante/' + out.paymentId);
     } catch (e) {
       this.toast.fail(e);
     } finally {

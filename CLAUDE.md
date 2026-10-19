@@ -86,6 +86,18 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - `completeCustomer()` en `routes-ordenes.ts`: si el celular ya es de otro cliente y el actual es de afán, los une (motos, órdenes y reservas pasan al existente y el de afán se borra). Con un cliente normal, un celular repetido sigue siendo error.
 - Queda en `audit_log` como `CLIENTE_COMPLETADO` o `CLIENTE_UNIDO`.
 
+## Varias motos por cliente
+
+- Un cliente puede tener varias motos (`bikes.customer_id`). El cliente las agrega al agendar; en el local, con una placa nueva se elige "Ya es cliente: otra moto", se busca por nombre, celular o placa y se envía `customerId` en `POST /orders`.
+- Los clientes de afán no aparecen en esa búsqueda.
+
+## Comprobante de venta
+
+- `/comprobante/:paymentId` (OWNER y ADMIN): comprobante imprimible de un cobro, con logo, placa, servicios, propina, medio de pago, recibido y cambio. Botones para imprimir y enviar por WhatsApp. Si el cobro fue anulado sale la marca "ANULADO".
+- Se abre solo al terminar un cobro; también desde la orden ("Ver comprobante") y desde Caja.
+- **No es factura electrónica** y así lo dice el pie. La factura DIAN con Factus sigue pendiente.
+- Al imprimir, `@media print` de `styles.css` oculta la barra superior y todo lo que tenga la clase `.no-imprimir`.
+
 ## Reglas del negocio que no se deben romper
 
 - **Un cobro nunca se borra.** ADMIN pide la anulación (`void_status = REQUESTED`); OWNER aprueba o rechaza. Al aprobar, el cobro queda `APPROVED` (anulado) y la orden vuelve a `READY`.

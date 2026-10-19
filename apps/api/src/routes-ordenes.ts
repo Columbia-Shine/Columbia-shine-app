@@ -176,7 +176,12 @@ ordenes.post('/orders', auth(...MANAGERS), async (req, res) => {
     }
     if (!bike) {
       let customer: { id: string };
-      if (b.rush === true) {
+      if (b.customerId) {
+        // Otra moto de un cliente que ya existe
+        const found = await one('select id from customers where id = $1', [String(b.customerId)], c);
+        need(found, 'Ese cliente ya no existe. Búscalo de nuevo.', 404);
+        customer = found;
+      } else if (b.rush === true) {
         customer = (await one('insert into customers (name, pending) values ($1, true) returning id', [PENDING_NAME], c))!;
       } else {
         const name = text(b.customerName, 'el nombre del cliente', 80);
@@ -350,6 +355,18 @@ ordenes.get('/payments', auth(...MANAGERS), async (req, res) => {
     [shift ? shift.id : null],
   );
   res.json(rows);
+});
+
+// Comprobante de venta de un cobro (no es factura electrónica)
+ordenes.get('/payments/:id/receipt', auth(...MANAGERS), async (req, res) => {
+  const p = await one(
+    `select p.id, p.order_id, p.method, p.amount, p.tip, p.cash_received, p.reference, p.created_at, p.void_status,
+       u.name as created_by_name
+     from payments p join users u on u.id = p.created_by where p.id = $1`,
+    [String(req.params.id)],
+  );
+  need(p, 'Cobro no encontrado.', 404);
+  res.json({ payment: p, order: await loadOrder(p.order_id) });
 });
 
 /** El cobro no se borra: queda anulado y la moto vuelve a "Lista para entregar". */

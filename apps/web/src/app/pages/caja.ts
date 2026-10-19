@@ -1,11 +1,12 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { Api, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } from '../core';
 
 @Component({
   selector: 'app-caja',
-  imports: [FormsModule, NgTemplateOutlet, MoneyInput, MoneyPipe, WhenPipe],
+  imports: [FormsModule, NgTemplateOutlet, RouterLink, MoneyInput, MoneyPipe, WhenPipe],
   template: `
     <main class="page">
       @if (loading()) {
@@ -93,6 +94,7 @@ import { Api, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } fr
                       <div class="fuerte">{{ p.code }} · {{ p.plate }}</div>
                       <div class="chico suave">{{ p.service_name }} · {{ methods[p.method] }} · {{ p.created_at | cuando }} · cobró {{ p.created_by_name }}</div>
                     </div>
+                    <a class="btn chico" [routerLink]="['/comprobante', p.id]">Comprobante</a>
                     <span class="num fuerte" style="font-size: 18px" [style.text-decoration]="p.void_status === 'APPROVED' ? 'line-through' : 'none'">{{ p.amount | money }}</span>
                     @if (p.void_status === 'APPROVED') {
                       <span class="etiqueta">Anulado</span>

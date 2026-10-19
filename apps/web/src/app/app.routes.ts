@@ -11,6 +11,7 @@ export const routes: Routes = [
   { path: 'ordenes', title: 'Órdenes · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/ordenes').then((m) => m.Ordenes) },
   { path: 'ordenes/:id', title: 'Orden · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/orden').then((m) => m.Orden) },
   { path: 'cobro/:id', title: 'Cobro · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/orden').then((m) => m.Cobro) },
+  { path: 'comprobante/:id', title: 'Comprobante · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/comprobante').then((m) => m.Comprobante) },
   { path: 'caja', title: 'Caja · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/caja').then((m) => m.Caja) },
   { path: 'agenda', title: 'Agenda · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/agenda').then((m) => m.Agenda) },
   { path: 'clientes', title: 'Clientes · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/clientes').then((m) => m.Clientes) },
