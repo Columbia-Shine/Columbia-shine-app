@@ -6,6 +6,7 @@ import { openShift } from './routes-ordenes';
 export const operacion = Router();
 
 const VALID_PAYMENT = `p.void_status is distinct from 'APPROVED'`;
+const METHOD_LABELS: Record<string, string> = { NEQUI: 'Nequi', DAVIPLATA: 'Daviplata', TRANSFERENCIA: 'transferencia', DATAFONO: 'datáfono' };
 
 // ---- Caja y turnos ----
 
@@ -97,17 +98,34 @@ operacion.post('/shifts/movements', auth(...MANAGERS), async (req, res) => {
 operacion.post('/shifts/close', auth(...MANAGERS), async (req, res) => {
   const counted = int(req.body?.countedCash, 'El efectivo contado');
   const note = optText(req.body?.note, 500);
+  const declared = req.body?.methods ?? {};
   const id = await tx(async (c) => {
     const shift = await one('select * from shifts where closed_at is null for update', [], c);
     need(shift, 'No hay turno abierto.');
     const s = await shiftSummary(shift.id, c);
     const difference = counted - s.expectedCash;
-    need(difference === 0 || note, 'Hay una diferencia de caja: escribe la explicación.');
+    // Cada medio distinto del efectivo que tuvo cobros se confirma contra lo que entró a la cuenta
+    const methodCounts = s.byMethod
+      .filter((m: any) => m.method !== 'EFECTIVO')
+      .map((m: any) => {
+        const expected = Number(m.amount) + Number(m.tips);
+        const value = declared[m.method];
+        need(value !== undefined && value !== null && value !== '', `Confirma cuánto entró por ${METHOD_LABELS[m.method] ?? m.method}.`);
+        const got = int(value, `Lo recibido por ${METHOD_LABELS[m.method] ?? m.method}`);
+        return { method: m.method, expected, counted: got, difference: got - expected };
+      });
+    const anyDifference = difference !== 0 || methodCounts.some((m: any) => m.difference !== 0);
+    need(!anyDifference || note, 'Hay una diferencia en el cierre: escribe la explicación.');
     await c.query(
-      `update shifts set closed_at = now(), closed_by = $2, expected_cash = $3, counted_cash = $4, difference = $5, difference_note = $6 where id = $1`,
-      [shift.id, req.user.id, s.expectedCash, counted, difference, note],
+      `update shifts set closed_at = now(), closed_by = $2, expected_cash = $3, counted_cash = $4, difference = $5, difference_note = $6, method_counts = $7
+       where id = $1`,
+      [shift.id, req.user.id, s.expectedCash, counted, difference, note, JSON.stringify(methodCounts)],
     );
-    await audit(req.user.id, 'TURNO_CERRADO', 'shift', shift.id, { esperado: s.expectedCash, contado: counted, diferencia: difference, nota: note }, c);
+    await audit(
+      req.user.id, 'TURNO_CERRADO', 'shift', shift.id,
+      { esperado: s.expectedCash, contado: counted, diferencia: difference, medios: methodCounts.map((m: any) => `${m.method}: ${m.counted} de ${m.expected}`), nota: note },
+      c,
+    );
     return shift.id as string;
   });
   res.json(await shiftSummary(id));

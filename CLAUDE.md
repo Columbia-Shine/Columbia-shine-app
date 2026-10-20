@@ -23,7 +23,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 005_nomina.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 006_cierre_medios.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -124,7 +124,8 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Una orden con cobro activo no se puede cancelar ni modificar.
 - **Comisión: 45%** de lo cobrado en cada orden que lavó la persona (incluye adicionales, descontado el descuento si lo hubo). Valor en `settings.commission_pct`.
 - Propinas: se reparten por igual entre quienes lavaron en el turno (en la nómina, entre quienes lavaron ese día).
-- Efectivo esperado = base + ventas y propinas en efectivo + entradas − gastos − retiros. Al cerrar, si hay diferencia, la explicación es obligatoria.
+- Efectivo esperado = base + ventas y propinas en efectivo + entradas − gastos − retiros.
+- Al cerrar se cuenta el efectivo y además se **confirma cada medio que tuvo cobros en el turno** (Nequi, Daviplata, transferencia, datáfono) contra lo esperado (ventas + propinas de ese medio). Si solo hubo efectivo, solo se pide el efectivo. Se guarda en `shifts.method_counts`. Si cualquier medio no cuadra, la explicación es obligatoria.
 - Adicionales "desde" (óxido, desmanchado): se pueden cobrar por encima del precio base, nunca por debajo.
 - El costo directo de los servicios (`services.direct_cost`) solo lo ve el OWNER.
 - Toda acción sensible queda en `audit_log` con `audit()`.

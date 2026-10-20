@@ -20,6 +20,26 @@ import { Api, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } fr
           <div class="kpi"><div class="rotulo">Efectivo contado</div><div class="valor">{{ c.shift.counted_cash | money }}</div></div>
           <div class="kpi"><div class="rotulo">Diferencia</div><div class="valor" [class.amarillo]="c.shift.difference !== 0">{{ c.shift.difference | money }}</div><div class="nota">{{ c.shift.difference_note || 'Caja cuadrada' }}</div></div>
         </section>
+        @if (c.shift.method_counts?.length) {
+          <section class="card col">
+            <h2>Otros medios de pago</h2>
+            <div class="tabla-caja">
+              <table style="min-width: 420px">
+                <thead><tr><th>Medio</th><th class="der">Esperado</th><th class="der">Confirmado</th><th class="der">Diferencia</th></tr></thead>
+                <tbody>
+                  @for (m of c.shift.method_counts; track m.method) {
+                    <tr>
+                      <td class="fuerte">{{ methods[m.method] }}</td>
+                      <td class="der">{{ m.expected | money }}</td>
+                      <td class="der">{{ m.counted | money }}</td>
+                      <td class="der fuerte" [class.amarillo]="m.difference !== 0">{{ m.difference === 0 ? 'Cuadra' : (m.difference | money) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
+        }
         <section class="card col">
           <h2>Pago del día a lavadores</h2>
           <ng-container *ngTemplateOutlet="nomina; context: { $implicit: c }" />
@@ -138,7 +158,7 @@ import { Api, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } fr
           }
           <div class="row" style="align-items: flex-end">
             <div>
-              <label for="contado">Efectivo contado</label>
+              <label for="contado">Efectivo contado en caja (esperado {{ s.expectedCash | money }})</label>
               <input id="contado" class="campo grande" style="width: 240px" dinero [(ngModel)]="counted" />
             </div>
             @if (counted() !== null) {
@@ -148,13 +168,28 @@ import { Api, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } fr
               </div>
             }
           </div>
-          @if (counted() !== null && difference() !== 0) {
+          @for (m of otherMethods(); track m.method) {
+            <div class="row" style="align-items: flex-end">
+              <div>
+                <label [for]="'medio-' + m.method">Confirma lo que entró por {{ methods[m.method] }} (esperado {{ m.expected | money }})</label>
+                <input [id]="'medio-' + m.method" class="campo grande" style="width: 240px" dinero
+                  [ngModel]="methodCounts()[m.method] ?? null" (ngModelChange)="setMethodCount(m.method, $event)" />
+              </div>
+              @if (methodCounts()[m.method] != null) {
+                <div class="aviso row between grow" [class.alerta]="methodDiff(m) !== 0" style="flex-basis: 240px; min-height: 64px">
+                  <span class="fuerte">{{ methodDiff(m) === 0 ? 'Cuadra' : methodDiff(m) < 0 ? 'Faltan' : 'Sobran' }}</span>
+                  <span class="num fuerte" style="font-size: 24px">{{ abs(methodDiff(m)) | money }}</span>
+                </div>
+              }
+            </div>
+          }
+          @if (anyDifference()) {
             <div>
               <label for="nota">Explicación (obligatoria si hay diferencia). El propietario la ve en el cierre.</label>
               <textarea id="nota" class="campo" rows="2" [(ngModel)]="note"></textarea>
             </div>
           }
-          <button class="btn primario grande" style="align-self: flex-start" [disabled]="busy() || counted() === null" (click)="close()">Cerrar turno</button>
+          <button class="btn primario grande" style="align-self: flex-start" [disabled]="busy() || !readyToClose()" (click)="close()">Cerrar turno</button>
         </section>
       }
 
@@ -203,6 +238,25 @@ export class Caja {
   protected voiding = signal('');
   protected voidReason = signal('');
   protected difference = computed(() => (Number(this.counted()) || 0) - (this.summary()?.expectedCash ?? 0));
+  /** Lo confirmado por cada medio distinto del efectivo (Nequi, Daviplata, transferencia, datáfono). */
+  protected methodCounts = signal<Record<string, number | null>>({});
+  /** Solo se piden los medios que tuvieron cobros en el turno; lo esperado incluye las propinas. */
+  protected otherMethods = computed(() =>
+    (this.summary()?.byMethod ?? [])
+      .filter((m: any) => m.method !== 'EFECTIVO')
+      .map((m: any) => ({ method: m.method, expected: Number(m.amount) + Number(m.tips) })),
+  );
+  protected methodDiff = (m: { method: string; expected: number }) => (Number(this.methodCounts()[m.method]) || 0) - m.expected;
+  protected anyDifference = computed(
+    () =>
+      (this.counted() !== null && this.difference() !== 0) ||
+      this.otherMethods().some((m: any) => this.methodCounts()[m.method] != null && this.methodDiff(m) !== 0),
+  );
+  protected readyToClose = computed(() => this.counted() !== null && this.otherMethods().every((m: any) => this.methodCounts()[m.method] != null));
+
+  setMethodCount(method: string, value: number | null) {
+    this.methodCounts.update((c) => ({ ...c, [method]: value }));
+  }
 
   constructor() {
     this.load();
@@ -260,9 +314,10 @@ export class Caja {
 
   close() {
     this.run(async () => {
-      const report = await this.api.post('/shifts/close', { countedCash: Number(this.counted()), note: this.note() });
+      const report = await this.api.post('/shifts/close', { countedCash: Number(this.counted()), methods: this.methodCounts(), note: this.note() });
       this.closed.set(report);
       this.counted.set(null);
+      this.methodCounts.set({});
       this.note.set('');
     }, 'Turno cerrado.');
   }
