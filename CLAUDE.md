@@ -23,7 +23,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 006_cierre_medios.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 007_tope_ajuste.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -103,8 +103,8 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 ## Nómina y acuerdos de mínimo
 
 - `/nomina` (solo OWNER, menú "Nómina"): por día y por persona, lavados, lo cobrado de las motos que lavó, comisión, propinas, ajuste del acuerdo y total. "Registrar pago" guarda la foto de esas cifras en `payroll_days` (uno por persona y día; se puede deshacer).
-- Acuerdo de mínimo (`pay_guarantees`, por persona y fechas): sin lavados en el día se paga `base_no_wash` solo si se marca que vino; con lavados, si la comisión no llega a `min_commission` se completa hasta ahí (`topupFor()`). Las propinas van aparte y no cuentan para el mínimo.
-- Acuerdo vigente: Gregorio, primer mes del 19 oct al 18 nov de 2026, base 0.000 sin lavados y mínimo 5.000 de comisión.
+- Acuerdo de mínimo (`pay_guarantees`, por persona y fechas): sin lavados en el día se paga `base_no_wash` solo si se marca que vino; con lavados, si la comisión no llega a `min_commission` se completa hasta ahí, pero nunca más de `max_topup` (vacío = sin tope) (`topupFor()`). Las propinas van aparte y no cuentan para el mínimo.
+- Acuerdo vigente: Gregorio, primer mes del 19 oct al 18 nov de 2026: base $30.000 sin lavados, mínimo $75.000 de comisión y máximo $30.000 de ajuste (con $40.000 de comisión se completan $30.000, no $35.000).
 - La sección "Acuerdos de mínimo" lleva el control: días pagados, comisiones, ajustes que puso el dueño y total pagado.
 
 ## Comprobante de venta

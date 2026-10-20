@@ -38,7 +38,7 @@ import { Api, bogotaDay, dayLabel, MoneyInput, MoneyPipe, ROLE_NAMES, Toast, Whe
               <div class="fila"><span class="suave">Propinas</span><span class="num">{{ p.tips | money }}</span></div>
               @if (p.guarantee; as g) {
                 <div class="aviso chico">
-                  Acuerdo: sin lavados, base {{ g.base_no_wash | money }}; con lavados, mínimo {{ g.min_commission | money }} de comisión.
+                  Acuerdo: sin lavados, base {{ g.base_no_wash | money }}; con lavados, mínimo {{ g.min_commission | money }} de comisión@if (g.max_topup !== null) { (completas máximo {{ g.max_topup | money }}) }.
                   @if (p.washes > 0) {
                     <span class="fuerte">{{ p.topup ? 'Se completan ' + money(p.topup) + '.' : 'Ya pasó el mínimo: no hay ajuste.' }}</span>
                   }
@@ -64,7 +64,7 @@ import { Api, bogotaDay, dayLabel, MoneyInput, MoneyPipe, ROLE_NAMES, Toast, Whe
             <div class="row between">
               <div>
                 <div class="fuerte">{{ g.name }} @if (g.current) { <span class="etiqueta amarilla">Vigente</span> } @else { <span class="etiqueta">Terminado</span> }</div>
-                <div class="chico suave">{{ label(g.starts_on) }} al {{ label(g.ends_on) }} · base sin lavados {{ g.base_no_wash | money }} · mínimo {{ g.min_commission | money }}</div>
+                <div class="chico suave">{{ label(g.starts_on) }} al {{ label(g.ends_on) }} · base sin lavados {{ g.base_no_wash | money }} · mínimo {{ g.min_commission | money }}@if (g.max_topup !== null) { · completas máximo {{ g.max_topup | money }} }</div>
                 @if (g.note) { <div class="chico suave">{{ g.note }}</div> }
               </div>
               @if (g.current) { <button class="btn chico" (click)="endToday(g)">Terminar hoy</button> }
@@ -115,6 +115,7 @@ import { Api, bogotaDay, dayLabel, MoneyInput, MoneyPipe, ROLE_NAMES, Toast, Whe
             <div><label for="g-h">Hasta</label><input id="g-h" class="campo" type="date" [(ngModel)]="gTo" /></div>
             <div><label for="g-b">Base si no hay lavados</label><input id="g-b" class="campo" dinero [(ngModel)]="gBase" /></div>
             <div><label for="g-m">Mínimo de comisión</label><input id="g-m" class="campo" dinero [(ngModel)]="gMin" /></div>
+            <div><label for="g-t">Máximo que completas (vacío = sin tope)</label><input id="g-t" class="campo" dinero [(ngModel)]="gCap" /></div>
             <div><label for="g-n">Nota</label><input id="g-n" class="campo" placeholder="Ej.: primer mes" [(ngModel)]="gNote" /></div>
           </div>
           <button class="btn" style="align-self: flex-start" [disabled]="busy()" (click)="createGuarantee()">Crear acuerdo</button>
@@ -147,6 +148,7 @@ export class Nomina {
   protected gTo = signal(bogotaDay(30));
   protected gBase = signal<number | null>(null);
   protected gMin = signal<number | null>(null);
+  protected gCap = signal<number | null>(null);
   protected gNote = signal('');
 
   constructor() {
@@ -215,11 +217,12 @@ export class Nomina {
     this.run(async () => {
       await this.api.post('/guarantees', {
         userId: this.gUser(), startsOn: this.gFrom(), endsOn: this.gTo(),
-        baseNoWash: Number(this.gBase()) || 0, minCommission: Number(this.gMin()) || 0, note: this.gNote(),
+        baseNoWash: Number(this.gBase()) || 0, minCommission: Number(this.gMin()) || 0, maxTopup: this.gCap(), note: this.gNote(),
       });
       this.gUser.set('');
       this.gBase.set(null);
       this.gMin.set(null);
+      this.gCap.set(null);
       this.gNote.set('');
     }, 'Acuerdo creado.');
   }

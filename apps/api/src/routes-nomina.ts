@@ -8,12 +8,18 @@ export const nomina = Router();
 const VALID_PAYMENT = `p.void_status is distinct from 'APPROVED'`;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-type Guarantee = { id: string; base_no_wash: number; min_commission: number; starts_on: string; ends_on: string };
+type Guarantee = { id: string; base_no_wash: number; min_commission: number; max_topup: number | null; starts_on: string; ends_on: string };
 
-/** Ajuste del acuerdo: sin lavados se paga la base (si vino); con lavados se completa hasta el mínimo. */
+/**
+ * Ajuste del acuerdo: sin lavados se paga la base (si vino); con lavados se completa hasta el mínimo,
+ * pero nunca más del tope (max_topup). Ej.: mínimo 75.000 y tope 30.000; con 40.000 de comisión se dan 30.000.
+ */
 export function topupFor(g: Guarantee | null, washes: number, commission: number, worked: boolean): number {
   if (!g) return 0;
-  if (washes > 0) return Math.max(0, g.min_commission - commission);
+  if (washes > 0) {
+    const missing = Math.max(0, g.min_commission - commission);
+    return g.max_topup === null ? missing : Math.min(missing, g.max_topup);
+  }
   return worked ? g.base_no_wash : 0;
 }
 
@@ -37,7 +43,7 @@ async function dayFigures(day: string, db: Db = pool) {
   // Las propinas se reparten por igual entre quienes lavaron ese día
   const tipEach = washed.length ? Math.floor(tipsDay / washed.length) : 0;
   const guarantees = await q<Guarantee & { user_id: string }>(
-    `select distinct on (user_id) id, user_id, base_no_wash, min_commission, starts_on::text, ends_on::text
+    `select distinct on (user_id) id, user_id, base_no_wash, min_commission, max_topup, starts_on::text, ends_on::text
      from pay_guarantees where $1::date between starts_on and ends_on order by user_id, created_at desc`,
     [day],
     db,
@@ -111,7 +117,7 @@ nomina.delete('/payroll/:id', auth('OWNER'), async (req, res) => {
 
 nomina.get('/guarantees', auth('OWNER'), async (_req, res) => {
   const rows = await q(
-    `select g.id, g.user_id, u.name, g.starts_on::text, g.ends_on::text, g.base_no_wash, g.min_commission, g.note,
+    `select g.id, g.user_id, u.name, g.starts_on::text, g.ends_on::text, g.base_no_wash, g.min_commission, g.max_topup, g.note,
        ${TODAY} between g.starts_on and g.ends_on as current
      from pay_guarantees g join users u on u.id = g.user_id order by g.starts_on desc`,
   );
@@ -139,12 +145,13 @@ nomina.post('/guarantees', auth('OWNER'), async (req, res) => {
   const base = int(b.baseNoWash ?? 0, 'La base sin lavados');
   const min = int(b.minCommission ?? 0, 'El mínimo de comisión');
   need(base > 0 || min > 0, 'Pon la base sin lavados o el mínimo de comisión.');
+  const cap = b.maxTopup === undefined || b.maxTopup === null || b.maxTopup === '' ? null : int(b.maxTopup, 'El máximo que se completa');
   const g = await one(
-    `insert into pay_guarantees (user_id, starts_on, ends_on, base_no_wash, min_commission, note, created_by)
-     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
-    [u.id, b.startsOn, b.endsOn, base, min, optText(b.note, 300), req.user.id],
+    `insert into pay_guarantees (user_id, starts_on, ends_on, base_no_wash, min_commission, max_topup, note, created_by)
+     values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+    [u.id, b.startsOn, b.endsOn, base, min, cap, optText(b.note, 300), req.user.id],
   );
-  await audit(req.user.id, 'ACUERDO_CREADO', 'user', u.id, { persona: u.name, desde: b.startsOn, hasta: b.endsOn, base, minimo: min });
+  await audit(req.user.id, 'ACUERDO_CREADO', 'user', u.id, { persona: u.name, desde: b.startsOn, hasta: b.endsOn, base, minimo: min, tope: cap });
   res.status(201).json({ id: g.id });
 });
 
