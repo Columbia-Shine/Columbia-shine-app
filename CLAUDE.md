@@ -93,6 +93,7 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 
 - Un cliente puede tener varias motos (`bikes.customer_id`). El cliente las agrega al agendar; en el local, con una placa nueva se elige "Ya es cliente: otra moto", se busca por nombre, celular o placa y se envía `customerId` en `POST /orders`.
 - Los clientes de afán no aparecen en esa búsqueda.
+- Si el cliente trae varias motos a la vez: "Crear y recibir otra moto de este cliente" crea la orden y deja la recepción lista para la siguiente placa con el cliente ya elegido (modo "Ya es cliente"), conservando el servicio.
 
 ## Facturar
 

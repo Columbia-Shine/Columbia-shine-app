@@ -151,6 +151,10 @@ const MAX_PHOTOS = 6;
             </select>
           </div>
           <button class="btn primario grande" [disabled]="busy()" (click)="create()">Crear orden</button>
+          <button class="btn" [disabled]="busy()" (click)="create(true)">Crear y recibir otra moto de este cliente</button>
+          @if (received().length) {
+            <p class="chico suave">Ya recibidas de este cliente: {{ received().join(', ') }}</p>
+          }
         </aside>
       </div>
     </main>
@@ -271,7 +275,28 @@ export class Recepcion {
     this.photos.update((p) => p.filter((_, i) => i !== index));
   }
 
-  async create() {
+  /** Órdenes creadas en esta recepción para el mismo cliente (cuando trae varias motos). */
+  protected received = signal<string[]>([]);
+
+  /** Deja el formulario listo para otra moto del mismo cliente, sin volver a escribir sus datos. */
+  private nextBike(order: any) {
+    this.received.update((r) => [...r, `${order.plate} (${order.code})`]);
+    this.plate.set('');
+    this.bike.set(null);
+    this.searched.set(false);
+    this.brand.set('');
+    this.extraIds.set([]);
+    this.photos.set([]);
+    this.notes.set('');
+    this.washerId.set('');
+    this.bookingId = '';
+    this.mode.set('existente');
+    this.owner.set({ id: order.customer_id, name: order.customer_name, phone: order.customer_phone, plates: order.plate });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => document.getElementById('placa')?.focus(), 300);
+  }
+
+  async create(another = false) {
     if (this.plate().length < 5) return this.toast.show('Escribe la placa.', true);
     if (!this.searched()) return this.toast.show('Espera un momento: estamos buscando la placa.', true);
     if (!this.serviceId()) return this.toast.show('Elige el servicio.', true);
@@ -293,6 +318,11 @@ export class Recepcion {
         photos: this.photos(),
         bookingId: this.bookingId || null,
       });
+      if (another) {
+        this.toast.show(`Orden ${order.code} creada. Escribe la placa de la otra moto de ${order.customer_name}.`);
+        this.nextBike(order);
+        return;
+      }
       this.toast.show(`Orden ${order.code} creada.`);
       this.router.navigateByUrl('/ordenes');
     } catch (e) {
