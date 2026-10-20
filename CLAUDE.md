@@ -106,6 +106,7 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Acuerdo de mínimo (`pay_guarantees`, por persona y fechas): sin lavados en el día se paga `base_no_wash` solo si se marca que vino; con lavados, si la comisión no llega a `min_commission` se completa hasta ahí, pero nunca más de `max_topup` (vacío = sin tope) (`topupFor()`). Las propinas van aparte y no cuentan para el mínimo.
 - Acuerdo vigente: Gregorio, primer mes del 19 oct al 18 nov de 2026: base $30.000 sin lavados, mínimo $75.000 de comisión y máximo $30.000 de ajuste (con $40.000 de comisión se completan $30.000, no $35.000).
 - La sección "Acuerdos de mínimo" lleva el control: días pagados, comisiones, ajustes que puso el dueño y total pagado.
+- **Mi mes** (`GET /my-month`, ADMIN y WASHER): en Reportes del administrador (menú "Mi mes y hoy") ve sus motos lavadas del mes, lo que generó, su comisión, lo que el dueño le ha pagado (con propinas y ajustes) día por día y su acuerdo. Solo sus números; el reporte del negocio para él sigue siendo del día.
 
 ## Comprobante de venta
 

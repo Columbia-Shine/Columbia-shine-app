@@ -10,7 +10,7 @@ import { Api, bogotaDay, dayLabel, METHOD_NAMES, MoneyPipe, Session, Toast, When
       <div class="row between">
         <div>
           <p class="rotulo">{{ rangeLabel() }}</p>
-          <h1>{{ owner ? 'Reportes' : 'Reporte de hoy' }}</h1>
+          <h1>{{ owner ? 'Reportes' : 'Mi mes y hoy' }}</h1>
         </div>
         <div class="row no-imprimir">
           @if (owner) {
@@ -29,6 +29,47 @@ import { Api, bogotaDay, dayLabel, METHOD_NAMES, MoneyPipe, Session, Toast, When
           <div><label for="hasta">Hasta</label><input id="hasta" class="campo" type="date" [(ngModel)]="to" /></div>
           <button class="btn" (click)="load()">Consultar</button>
         </div>
+      }
+
+      @if (!owner && mine(); as m) {
+        <section class="card col">
+          <div class="row between">
+            <h2>Mi mes · {{ monthName(m.from) }}</h2>
+            <span class="chico suave">{{ dayLabel(m.from) }} al {{ dayLabel(m.to) }}</span>
+          </div>
+          <div class="grid">
+            <div class="kpi azul"><div class="rotulo">Motos que lavé</div><div class="valor">{{ m.totals.washes }}</div></div>
+            <div class="kpi"><div class="rotulo">Lo que generé</div><div class="valor">{{ m.totals.washed | money }}</div><div class="nota">Cobrado de las motos que lavé</div></div>
+            <div class="kpi"><div class="rotulo">Mi comisión ({{ m.pct }}%)</div><div class="valor amarillo">{{ m.totals.commission | money }}</div></div>
+            <div class="kpi"><div class="rotulo">Pagado por el dueño</div><div class="valor">{{ m.totals.paid | money }}</div><div class="nota">{{ m.totals.daysPaid }} día(s) · propinas {{ m.totals.tips | money }} · ajustes {{ m.totals.topup | money }}</div></div>
+          </div>
+          @if (m.guarantee; as g) {
+            <p class="aviso chico">
+              Acuerdo hasta el {{ dayLabel(g.ends_on) }}: si un día no hay lavados, base de {{ g.base_no_wash | money }}; con lavados, si la comisión no llega a {{ g.min_commission | money }}, se completa{{ g.max_topup !== null ? ' hasta ' + (g.max_topup | money) : '' }}.
+            </p>
+          }
+          <div class="tabla-caja">
+            <table style="min-width: 520px">
+              <thead><tr><th>Día</th><th class="der">Motos</th><th class="der">Generé</th><th class="der">Comisión</th><th class="der">Ajuste</th><th class="der">Pagado</th></tr></thead>
+              <tbody>
+                @for (r of m.days; track r.day) {
+                  <tr>
+                    <td>{{ dayLabel(r.day) }}</td>
+                    <td class="der">{{ r.washes }}</td>
+                    <td class="der">{{ r.washed | money }}</td>
+                    <td class="der">{{ r.commission | money }}</td>
+                    <td class="der" [class.amarillo]="r.paid?.topup">{{ r.paid ? (r.paid.topup | money) : '—' }}</td>
+                    <td class="der fuerte">{{ r.paid ? (r.paid.total | money) : 'Pendiente' }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="6" class="suave">Todavía no has lavado motos este mes.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="chico suave">"Pendiente" es un día que el dueño aún no ha registrado como pagado.</p>
+        </section>
+        <h2 style="margin-top: 8px">Negocio hoy</h2>
       }
 
       @if (data(); as d) {
@@ -191,9 +232,16 @@ export class Reportes {
     return d.from === d.to ? dayLabel(d.from) : `${dayLabel(d.from)} – ${dayLabel(d.to)}`;
   });
 
+  /** El mes de quien entra (el administrador también lava). */
+  protected mine = signal<any | null>(null);
+  protected dayLabel = dayLabel;
+  protected monthName = (day: string) =>
+    new Intl.DateTimeFormat('es-CO', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(day + 'T12:00:00Z'));
+
   constructor() {
     this.pick(this.range());
     if (this.owner) this.api.get('/shifts/history').then((s) => this.shifts.set(s), this.toast.fail);
+    else this.api.get('/my-month').then((m) => this.mine.set(m), this.toast.fail);
   }
 
   pick(id: string) {

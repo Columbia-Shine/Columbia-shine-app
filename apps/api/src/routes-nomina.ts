@@ -113,6 +113,51 @@ nomina.delete('/payroll/:id', auth('OWNER'), async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Mi mes: lo que lleva en el mes quien lava (el administrador también lava) ----
+
+nomina.get('/my-month', auth('ADMIN', 'WASHER'), async (req, res) => {
+  const pct = await setting('commission_pct', 45);
+  const { from, to } = await one(`select date_trunc('month', ${TODAY})::date::text as from, ${TODAY}::text as to`);
+  // Lo que generó: lo cobrado en el mes de las motos que lavó
+  const days = await q(
+    `select ${localDate('p.created_at')}::text as day, count(*) as washes, sum(p.amount) as washed
+     from payments p join orders o on o.id = p.order_id
+     where o.washer_id = $1 and ${VALID_PAYMENT} and ${localDate('p.created_at')} between $2::date and $3::date
+     group by 1 order by 1 desc`,
+    [req.user.id, from, to],
+  );
+  const paid = await q(
+    `select day::text, commission, tips, topup, total from payroll_days where user_id = $1 and day between $2::date and $3::date`,
+    [req.user.id, from, to],
+  );
+  // Días pagados sin lavados (base del acuerdo) también se muestran
+  const allDays = [...new Set([...days.map((d) => d.day), ...paid.map((p) => p.day)])].sort().reverse();
+  const rows = allDays.map((day) => {
+    const d = days.find((x) => x.day === day);
+    const p = paid.find((x) => x.day === day) ?? null;
+    const washed = d ? Number(d.washed) : 0;
+    return { day, washes: d ? Number(d.washes) : 0, washed, commission: Math.round((washed * pct) / 100), paid: p };
+  });
+  const sum = (f: (r: any) => number) => rows.reduce((a, r) => a + f(r), 0);
+  const guarantee = await one(
+    `select starts_on::text, ends_on::text, base_no_wash, min_commission, max_topup from pay_guarantees
+     where user_id = $1 and ${TODAY} between starts_on and ends_on order by created_at desc limit 1`,
+    [req.user.id],
+  );
+  res.json({
+    from, to, pct, guarantee: guarantee ?? null, days: rows,
+    totals: {
+      washes: sum((r) => r.washes),
+      washed: sum((r) => r.washed),
+      commission: sum((r) => r.commission),
+      topup: sum((r) => r.paid?.topup ?? 0),
+      tips: sum((r) => r.paid?.tips ?? 0),
+      paid: sum((r) => r.paid?.total ?? 0),
+      daysPaid: rows.filter((r) => r.paid).length,
+    },
+  });
+});
+
 // ---- Acuerdos de mínimo ----
 
 nomina.get('/guarantees', auth('OWNER'), async (_req, res) => {
