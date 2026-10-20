@@ -134,10 +134,7 @@ abstract class Booker {
         @if (!bikeId()) {
           <div class="col">
             <div><label for="np">Placa</label><input id="np" class="campo" style="text-transform: uppercase" maxlength="8" [(ngModel)]="newPlate" /></div>
-            <div class="row">
-              <div class="grow"><label for="nb">Marca</label><input id="nb" class="campo" [(ngModel)]="newBrand" /></div>
-              <div class="grow"><label for="nm">Modelo</label><input id="nm" class="campo" [(ngModel)]="newModel" /></div>
-            </div>
+            <div><label for="nb">Marca</label><input id="nb" class="campo" [(ngModel)]="newBrand" /></div>
             <button class="btn" (click)="addBike()">Guardar moto</button>
           </div>
         }
@@ -200,7 +197,6 @@ export class Agendar extends Booker {
   protected bikeId = signal('');
   protected newPlate = signal('');
   protected newBrand = signal('');
-  protected newModel = signal('');
 
   constructor() {
     super();
@@ -212,12 +208,11 @@ export class Agendar extends Booker {
 
   async addBike() {
     try {
-      const bike = await this.api.post('/my/bikes', { plate: this.newPlate(), brand: this.newBrand(), model: this.newModel() });
+      const bike = await this.api.post('/my/bikes', { plate: this.newPlate(), brand: this.newBrand() });
       this.bikes.update((b) => [...b, bike]);
       this.bikeId.set(bike.id);
       this.newPlate.set('');
       this.newBrand.set('');
-      this.newModel.set('');
     } catch (e) {
       this.toast.fail(e);
     }

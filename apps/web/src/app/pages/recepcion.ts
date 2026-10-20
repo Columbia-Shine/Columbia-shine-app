@@ -79,8 +79,6 @@ const MAX_PHOTOS = 6;
                   <div><label for="cp">Celular</label><input id="cp" class="campo" type="tel" inputmode="numeric" [(ngModel)]="customerPhone" autocomplete="off" /></div>
                 }
                 <div><label for="br">Marca</label><input id="br" class="campo" [(ngModel)]="brand" /></div>
-                <div><label for="mo">Modelo</label><input id="mo" class="campo" [(ngModel)]="model" /></div>
-                <div><label for="co">Color</label><input id="co" class="campo" [(ngModel)]="color" /></div>
               </div>
             }
           </section>
@@ -184,8 +182,6 @@ export class Recepcion {
   protected customerName = signal('');
   protected customerPhone = signal('');
   protected brand = signal('');
-  protected model = signal('');
-  protected color = signal('');
   protected serviceId = signal('');
   protected extraIds = signal<string[]>([]);
   protected photos = signal<string[]>([]);
@@ -290,8 +286,6 @@ export class Recepcion {
         customerName: this.customerName(),
         customerPhone: this.customerPhone(),
         brand: this.brand(),
-        model: this.model(),
-        color: this.color(),
         serviceId: this.serviceId(),
         extraIds: this.extraIds(),
         notes: this.notes(),
