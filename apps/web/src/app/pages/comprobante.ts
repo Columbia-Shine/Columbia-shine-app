@@ -30,7 +30,7 @@ import { receiptImage } from './comprobante-imagen';
             <img src="logo.png" alt="Columbia Shine" width="96" height="92" />
             <div class="marca">Columbia Shine</div>
             <div>Pasión por tu máquina.</div>
-            <div>Medellín, Colombia</div>
+            <div>Bogotá, Colombia</div>
           </header>
 
           <div class="linea"></div>

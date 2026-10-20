@@ -135,7 +135,7 @@ export async function receiptImage(d: any, methods: Record<string, string>, logo
   }
   center('Columbia Shine', 800, 20, 28, true);
   center('Pasión por tu máquina.');
-  center('Medellín, Colombia');
+  center('Bogotá, Colombia');
 
   dashed();
   center(`Comprobante de venta ${o.code}`, 700);

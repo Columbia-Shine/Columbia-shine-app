@@ -1,6 +1,6 @@
 # Columbia Shine · contexto para Claude
 
-App de operación de **Columbia Shine**, un motolavado (lavado y detailing de motos) en Medellín, Colombia.
+App de operación de **Columbia Shine**, un motolavado (lavado y detailing de motos) en Bogotá, Colombia.
 Dueño: Juan Camilo Arenas. Administrador de turno: Gregorio (también lava).
 Todo el texto de la interfaz va en **español de Colombia**, claro y corto, pensado para usarse en tablet y celular durante la jornada.
 
