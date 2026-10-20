@@ -1,0 +1,161 @@
+import { Router } from 'express';
+import { audit, Db, localDate, one, pool, q, setting, TODAY, tx } from './db';
+import { auth, int, need, optText } from './auth';
+
+/** Nómina diaria del equipo (comisión, propinas y acuerdos de mínimo). Solo el propietario. */
+export const nomina = Router();
+
+const VALID_PAYMENT = `p.void_status is distinct from 'APPROVED'`;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+type Guarantee = { id: string; base_no_wash: number; min_commission: number; starts_on: string; ends_on: string };
+
+/** Ajuste del acuerdo: sin lavados se paga la base (si vino); con lavados se completa hasta el mínimo. */
+export function topupFor(g: Guarantee | null, washes: number, commission: number, worked: boolean): number {
+  if (!g) return 0;
+  if (washes > 0) return Math.max(0, g.min_commission - commission);
+  return worked ? g.base_no_wash : 0;
+}
+
+async function today(db: Db = pool): Promise<string> {
+  return (await one(`select ${TODAY}::text as d`, [], db)).d;
+}
+
+/** Cifras de un día por persona: lo cobrado de las motos que lavó, su comisión, propinas y el acuerdo vigente. */
+async function dayFigures(day: string, db: Db = pool) {
+  const pct = await setting('commission_pct', 45);
+  const staff = await q(`select id, name, role from users where active and role in ('ADMIN', 'WASHER') order by name`, [], db);
+  const washed = await q(
+    `select o.washer_id as id, count(*) as n, sum(p.amount) as washed
+     from payments p join orders o on o.id = p.order_id
+     where ${localDate('p.created_at')} = $1::date and ${VALID_PAYMENT} and o.washer_id is not null
+     group by o.washer_id`,
+    [day],
+    db,
+  );
+  const tipsDay = Number((await one(`select coalesce(sum(p.tip), 0) as t from payments p where ${localDate('p.created_at')} = $1::date and ${VALID_PAYMENT}`, [day], db)).t);
+  // Las propinas se reparten por igual entre quienes lavaron ese día
+  const tipEach = washed.length ? Math.floor(tipsDay / washed.length) : 0;
+  const guarantees = await q<Guarantee & { user_id: string }>(
+    `select distinct on (user_id) id, user_id, base_no_wash, min_commission, starts_on::text, ends_on::text
+     from pay_guarantees where $1::date between starts_on and ends_on order by user_id, created_at desc`,
+    [day],
+    db,
+  );
+  const paid = await q(`select d.*, u.name as paid_by_name from payroll_days d join users u on u.id = d.paid_by where d.day = $1::date`, [day], db);
+
+  const people = staff
+    .map((u) => {
+      const w = washed.find((x) => x.id === u.id);
+      const washes = w ? Number(w.n) : 0;
+      const sales = w ? Number(w.washed) : 0;
+      const commission = Math.round((sales * pct) / 100);
+      const tips = washes ? tipEach : 0;
+      const g = guarantees.find((x) => x.user_id === u.id) ?? null;
+      const topup = topupFor(g, washes, commission, false);
+      return {
+        id: u.id, name: u.name, role: u.role, washes, washed: sales, commission, tips, topup,
+        total: commission + tips + topup,
+        // Si no lavó, la base del acuerdo solo se paga si vino a trabajar
+        baseIfWorked: g && washes === 0 ? g.base_no_wash : 0,
+        guarantee: g,
+        paid: paid.find((p) => p.user_id === u.id) ?? null,
+      };
+    })
+    .filter((p) => p.washes > 0 || p.guarantee || p.paid);
+  return { day, pct, people };
+}
+
+nomina.get('/payroll', auth('OWNER'), async (req, res) => {
+  const day = DAY.test(String(req.query.day)) ? String(req.query.day) : await today();
+  res.json(await dayFigures(day));
+});
+
+nomina.post('/payroll/pay', auth('OWNER'), async (req, res) => {
+  const b = req.body ?? {};
+  const day = String(b.day);
+  need(DAY.test(day), 'Elige el día.');
+  need(day <= (await today()), 'No se puede pagar un día que no ha pasado.');
+  const out = await tx(async (c) => {
+    // Un candado por persona y día evita registrar el mismo pago dos veces
+    await c.query('select pg_advisory_xact_lock(hashtext($1))', [`payroll:${b.userId}:${day}`]);
+    const fig = (await dayFigures(day, c)).people.find((p) => p.id === String(b.userId));
+    need(fig, 'Esa persona no tiene nada por pagar ese día.');
+    need(!fig.paid, 'Ese día ya está registrado como pagado.', 409);
+    const worked = fig.washes > 0 || b.worked === true;
+    const topup = topupFor(fig.guarantee, fig.washes, fig.commission, worked);
+    const total = fig.commission + fig.tips + topup;
+    need(total > 0, 'No hay nada por pagar ese día.');
+    const row = await one(
+      `insert into payroll_days (user_id, day, washes, washed, commission, tips, topup, total, guarantee_id, note, paid_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
+      [fig.id, day, fig.washes, fig.washed, fig.commission, fig.tips, topup, total, fig.guarantee?.id ?? null, optText(b.note, 300), req.user.id],
+      c,
+    );
+    await audit(req.user.id, 'NOMINA_PAGADA', 'user', fig.id, { persona: fig.name, dia: day, comision: fig.commission, propinas: fig.tips, ajuste: topup, total }, c);
+    return row.id;
+  });
+  res.status(201).json({ id: out });
+});
+
+// Deshacer un pago mal registrado (por ejemplo, si después se anuló un cobro de ese día)
+nomina.delete('/payroll/:id', auth('OWNER'), async (req, res) => {
+  const d = await one(`select d.*, u.name from payroll_days d join users u on u.id = d.user_id where d.id = $1`, [req.params.id]);
+  need(d, 'Pago no encontrado.', 404);
+  await q('delete from payroll_days where id = $1', [d.id]);
+  await audit(req.user.id, 'NOMINA_DESHECHA', 'user', d.user_id, { persona: d.name, dia: d.day, total: d.total });
+  res.json({ ok: true });
+});
+
+// ---- Acuerdos de mínimo ----
+
+nomina.get('/guarantees', auth('OWNER'), async (_req, res) => {
+  const rows = await q(
+    `select g.id, g.user_id, u.name, g.starts_on::text, g.ends_on::text, g.base_no_wash, g.min_commission, g.note,
+       ${TODAY} between g.starts_on and g.ends_on as current
+     from pay_guarantees g join users u on u.id = g.user_id order by g.starts_on desc`,
+  );
+  // Control de cada acuerdo: los días pagados dentro de sus fechas
+  for (const g of rows) {
+    g.days = await q(
+      `select id, day::text, washes, washed, commission, tips, topup, total from payroll_days
+       where user_id = $1 and day between $2::date and $3::date order by day desc`,
+      [g.user_id, g.starts_on, g.ends_on],
+    );
+    g.totals = g.days.reduce(
+      (a: any, d: any) => ({ days: a.days + 1, commission: a.commission + d.commission, topup: a.topup + d.topup, total: a.total + d.total }),
+      { days: 0, commission: 0, topup: 0, total: 0 },
+    );
+  }
+  res.json(rows);
+});
+
+nomina.post('/guarantees', auth('OWNER'), async (req, res) => {
+  const b = req.body ?? {};
+  const u = await one(`select id, name from users where id = $1 and role in ('ADMIN', 'WASHER')`, [String(b.userId)]);
+  need(u, 'Elige la persona.');
+  need(DAY.test(String(b.startsOn)) && DAY.test(String(b.endsOn)), 'Elige las fechas del acuerdo.');
+  need(b.endsOn >= b.startsOn, 'La fecha final debe ser después de la inicial.');
+  const base = int(b.baseNoWash ?? 0, 'La base sin lavados');
+  const min = int(b.minCommission ?? 0, 'El mínimo de comisión');
+  need(base > 0 || min > 0, 'Pon la base sin lavados o el mínimo de comisión.');
+  const g = await one(
+    `insert into pay_guarantees (user_id, starts_on, ends_on, base_no_wash, min_commission, note, created_by)
+     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+    [u.id, b.startsOn, b.endsOn, base, min, optText(b.note, 300), req.user.id],
+  );
+  await audit(req.user.id, 'ACUERDO_CREADO', 'user', u.id, { persona: u.name, desde: b.startsOn, hasta: b.endsOn, base, minimo: min });
+  res.status(201).json({ id: g.id });
+});
+
+// Terminar un acuerdo antes de tiempo
+nomina.patch('/guarantees/:id', auth('OWNER'), async (req, res) => {
+  const g = await one(`select g.*, u.name from pay_guarantees g join users u on u.id = g.user_id where g.id = $1`, [req.params.id]);
+  need(g, 'Acuerdo no encontrado.', 404);
+  const endsOn = String(req.body?.endsOn);
+  need(DAY.test(endsOn), 'Elige la fecha final.');
+  need(endsOn >= (await one('select $1::date::text as d', [g.starts_on])).d, 'La fecha final debe ser después de la inicial.');
+  await q('update pay_guarantees set ends_on = $2 where id = $1', [g.id, endsOn]);
+  await audit(req.user.id, 'ACUERDO_EDITADO', 'user', g.user_id, { persona: g.name, hasta: endsOn });
+  res.json({ ok: true });
+});

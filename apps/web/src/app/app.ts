@@ -56,7 +56,7 @@ export class App {
       { path: '/clientes', label: 'Clientes' },
       { path: '/reportes', label: role === 'OWNER' ? 'Reportes' : 'Reporte de hoy' },
     ];
-    return role === 'OWNER' ? [...base, { path: '/ajustes', label: 'Ajustes' }] : base;
+    return role === 'OWNER' ? [...base, { path: '/nomina', label: 'Nómina' }, { path: '/ajustes', label: 'Ajustes' }] : base;
   });
 
   logout() {
