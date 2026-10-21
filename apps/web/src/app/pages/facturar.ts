@@ -66,7 +66,7 @@ import { Api, METHOD_NAMES, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../
                   <td>{{ p.created_at | cuando }}</td>
                   <td><a [routerLink]="['/ordenes', p.order_id]">{{ p.code }}</a></td>
                   <td class="fuerte">{{ p.plate }}</td>
-                  <td>{{ methods[p.method] }}</td>
+                  <td>{{ methods[p.method] }} @if (p.edited_at) { <span class="etiqueta">Editado</span> }</td>
                   <td>{{ p.created_by_name }}</td>
                   <td class="der fuerte">
                     @if (p.void_status === 'APPROVED') { <span class="etiqueta" style="margin-right: 6px">Anulado</span> }

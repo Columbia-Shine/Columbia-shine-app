@@ -23,7 +23,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 007_tope_ajuste.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 008_cobro_editado.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -120,6 +120,7 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 ## Reglas del negocio que no se deben romper
 
 - **Un cobro nunca se borra.** ADMIN pide la anulación (`void_status = REQUESTED`); OWNER aprueba o rechaza. Al aprobar, el cobro queda `APPROVED` (anulado) y la orden vuelve a `READY`.
+- **Corregir un cobro** (`PATCH /payments/:id`, botón "Editar cobro" en el comprobante): medio de pago, descuento (cambia el valor), propina, referencia y efectivo recibido, con motivo obligatorio. ADMIN solo mientras el turno del cobro esté abierto; OWNER siempre (si el turno ya cerró, el cierre guardado no cambia, los reportes sí). No se editan cobros anulados ni con anulación pendiente, ni los servicios de la orden (para eso se anula y se cobra de nuevo). El antes y el después quedan en `audit_log` (`COBRO_EDITADO`) y el cobro muestra "Editado".
 - Se cobra una orden abierta en **cualquier estado** (WAITING, WASHING o READY), desde la vista **Facturar** (`/facturar`), y solo con un **turno de caja abierto**. Un solo turno abierto a la vez. No se entrega sin cobro.
 - **Descuento** al cobrar, en pesos o porcentaje (la pantalla lo convierte a pesos), con motivo obligatorio. `payments.amount` queda con el valor ya descontado y `payments.discount` / `discount_reason` guardan el descuento: ventas, caja y comisión usan lo que de verdad se cobró. Sale en el comprobante y en `audit_log`.
 - Una orden con cobro activo no se puede cancelar ni modificar.

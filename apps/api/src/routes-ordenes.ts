@@ -362,7 +362,7 @@ ordenes.get('/payments', auth(...MANAGERS), async (req, res) => {
   // Con turno abierto se muestran sus cobros; sin turno, los de hoy
   const where = shift ? 'p.shift_id = $1' : `${localDate('p.created_at')} = ${TODAY} and $1::text is null`;
   const rows = await q(
-    `select p.id, p.method, p.amount, p.tip, p.discount, p.created_at, p.void_status, p.void_reason,
+    `select p.id, p.method, p.amount, p.tip, p.discount, p.created_at, p.void_status, p.void_reason, p.edited_at,
        'CS-' || lpad(o.number::text, 6, '0') as code, o.id as order_id, b.plate, s.name as service_name,
        u.name as created_by_name, r.name as void_requested_by_name
      from payments p
@@ -379,12 +379,58 @@ ordenes.get('/payments', auth(...MANAGERS), async (req, res) => {
 ordenes.get('/payments/:id/receipt', auth(...MANAGERS), async (req, res) => {
   const p = await one(
     `select p.id, p.order_id, p.method, p.amount, p.tip, p.discount, p.discount_reason, p.cash_received, p.reference, p.created_at, p.void_status,
-       u.name as created_by_name
-     from payments p join users u on u.id = p.created_by where p.id = $1`,
+       p.edited_at, p.edit_reason, e.name as edited_by_name, u.name as created_by_name,
+       (select s.closed_at is null from shifts s where s.id = p.shift_id) as shift_open
+     from payments p join users u on u.id = p.created_by left join users e on e.id = p.edited_by where p.id = $1`,
     [String(req.params.id)],
   );
   need(p, 'Cobro no encontrado.', 404);
   res.json({ payment: p, order: await loadOrder(p.order_id) });
+});
+
+// Corregir un cobro (medio, descuento, propina, referencia, efectivo): no se borra, queda el antes y el después
+ordenes.patch('/payments/:id', auth(...MANAGERS), async (req, res) => {
+  const b = req.body ?? {};
+  const reason = text(b.reason, 'el motivo de la corrección', 300);
+  await tx(async (c) => {
+    const p = await one('select * from payments where id = $1 for update', [String(req.params.id)], c);
+    need(p, 'Cobro no encontrado.', 404);
+    need(p.void_status !== 'APPROVED', 'Este cobro está anulado: no se puede editar.');
+    need(p.void_status !== 'REQUESTED', 'Este cobro tiene una anulación pendiente: resuélvela primero.');
+    const shift = await one('select closed_at from shifts where id = $1', [p.shift_id], c);
+    // El administrador corrige mientras el turno está abierto; después, solo el propietario
+    need(req.user.role === 'OWNER' || !shift.closed_at, 'El turno de este cobro ya se cerró: solo el propietario puede corregirlo.', 403);
+    const o = await loadOrder(p.order_id, c);
+
+    const method = b.method === undefined ? p.method : String(b.method);
+    need(METHODS.includes(method), 'Elige cómo pagó.');
+    const discount = b.discount === undefined ? p.discount : b.discount ? int(b.discount, 'El descuento') : 0;
+    need(discount <= o.total, 'El descuento no puede ser mayor que el total.');
+    const discountReason = discount ? (b.discountReason === undefined ? p.discount_reason : optText(b.discountReason, 200)) : null;
+    need(!discount || discountReason, 'Escribe el motivo del descuento.');
+    const tip = b.tip === undefined ? p.tip : b.tip ? int(b.tip, 'La propina') : 0;
+    const amount = o.total - discount;
+    let cash: number | null = null;
+    if (method === 'EFECTIVO') {
+      const given = b.cashReceived === undefined ? p.cash_received : b.cashReceived;
+      const received = given === null || given === undefined || given === '' ? amount + tip : int(given, 'El efectivo recibido');
+      need(received >= amount + tip, 'El efectivo recibido no alcanza.');
+      cash = received;
+    }
+    const reference = method === 'EFECTIVO' ? null : b.reference === undefined ? p.reference : optText(b.reference, 40);
+
+    const before = { medio: p.method, valor: p.amount, descuento: p.discount, propina: p.tip, recibido: p.cash_received, referencia: p.reference };
+    const after = { medio: method, valor: amount, descuento: discount, propina: tip, recibido: cash, referencia: reference };
+    need(JSON.stringify(before) !== JSON.stringify(after), 'No hay cambios.');
+    await c.query(
+      `update payments set method = $2, amount = $3, discount = $4, discount_reason = $5, tip = $6, cash_received = $7, reference = $8,
+         edited_at = now(), edited_by = $9, edit_reason = $10
+       where id = $1`,
+      [p.id, method, amount, discount, discountReason, tip, cash, reference, req.user.id, reason],
+    );
+    await audit(req.user.id, 'COBRO_EDITADO', 'payment', p.id, { orden: o.code, antes: before, despues: after, motivo: reason, turno_cerrado: !!shift.closed_at }, c);
+  });
+  res.json({ ok: true });
 });
 
 /** El cobro no se borra: queda anulado y la moto vuelve a "Lista para entregar". */

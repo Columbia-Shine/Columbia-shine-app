@@ -1,12 +1,13 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { Api, METHOD_NAMES, money, MoneyPipe, Toast, WhenPipe } from '../core';
+import { Api, METHOD_NAMES, money, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } from '../core';
 import { receiptImage } from './comprobante-imagen';
 
 /** Comprobante de venta de un cobro: para imprimir o enviar por WhatsApp. No es factura electrónica. */
 @Component({
   selector: 'app-comprobante',
-  imports: [RouterLink, MoneyPipe, WhenPipe],
+  imports: [FormsModule, RouterLink, MoneyInput, MoneyPipe, WhenPipe],
   template: `
     <main class="page narrow">
       @if (data(); as d) {
@@ -14,9 +15,51 @@ import { receiptImage } from './comprobante-imagen';
           <button class="btn primario grande" [disabled]="!image()" (click)="share()">{{ image() ? 'Enviar imagen por WhatsApp' : 'Preparando imagen…' }}</button>
           <div class="row">
             <button class="btn grow" (click)="print()">Imprimir</button>
+            @if (canEdit()) { <button class="btn grow" (click)="startEdit()">Editar cobro</button> }
             <a class="btn grow" routerLink="/facturar">Volver a facturar</a>
           </div>
+          @if (d.payment.edited_at) {
+            <p class="aviso chico">Cobro corregido por {{ d.payment.edited_by_name }}, {{ d.payment.edited_at | cuando: 'completa' }} · {{ d.payment.edit_reason }}</p>
+          }
         </div>
+
+        @if (editing()) {
+          <div class="modal-fondo no-imprimir" (click)="editing.set(false)">
+            <section class="modal card col" role="dialog" aria-modal="true" aria-labelledby="edit-titulo" (click)="$event.stopPropagation()" (keydown.escape)="editing.set(false)">
+              <h2 id="edit-titulo">Corregir cobro {{ d.order.code }}</h2>
+              <p class="chico suave">Servicios de la orden: {{ d.order.total | money }}. Para cambiar los servicios, anula el cobro desde Caja y cobra de nuevo.</p>
+              <div>
+                <p class="rotulo">Medio de pago</p>
+                <div class="grid-sm">
+                  @for (m of methodList; track m) {
+                    <button class="opcion" style="text-align: center" [attr.aria-pressed]="eMethod() === m" (click)="eMethod.set(m)">{{ methods[m] }}</button>
+                  }
+                </div>
+              </div>
+              <div class="row">
+                <div class="grow"><label for="e-desc">Descuento</label><input id="e-desc" class="campo" dinero [(ngModel)]="eDiscount" /></div>
+                <div class="grow"><label for="e-tip">Propina</label><input id="e-tip" class="campo" dinero [(ngModel)]="eTip" /></div>
+              </div>
+              @if (eDiscountValue() > 0) {
+                <div><label for="e-dm">Motivo del descuento</label><input id="e-dm" class="campo" [(ngModel)]="eDiscountReason" /></div>
+              }
+              @if (eMethod() === 'EFECTIVO') {
+                <div><label for="e-cash">Efectivo recibido</label><input id="e-cash" class="campo" dinero [(ngModel)]="eCash" /></div>
+              } @else {
+                <div><label for="e-ref">Referencia</label><input id="e-ref" class="campo" [(ngModel)]="eReference" /></div>
+              }
+              <div class="tile row between"><span class="fuerte">Total pagado quedaría</span><span class="num fuerte" style="font-size: 22px">{{ eTotal() | money }}</span></div>
+              <div><label for="e-motivo">¿Por qué se corrige? (obligatorio)</label><input id="e-motivo" class="campo" placeholder="Ej.: pagó por Nequi, no en efectivo" [(ngModel)]="eReason" /></div>
+              @if (!d.payment.shift_open) {
+                <p class="aviso chico">El turno de este cobro ya se cerró: el cierre guardado no cambia; los reportes sí.</p>
+              }
+              <div class="row">
+                <button class="btn primario grow" [disabled]="busy()" (click)="saveEdit()">Guardar corrección</button>
+                <button class="btn grow" (click)="editing.set(false)">Cancelar</button>
+              </div>
+            </section>
+          </div>
+        }
         <p class="chico suave no-imprimir" style="text-align: center">
           En el celular se abre el menú de compartir: elige WhatsApp y el contacto.
           ¿No funciona? <a [href]="whatsapp()" target="_blank" rel="noopener">Enviar como texto</a>
@@ -117,7 +160,66 @@ export class Comprobante {
   /** El comprobante como imagen PNG, listo antes del toque para que el celular deje compartirlo. */
   protected image = signal<File | null>(null);
 
+  private owner = inject(Session).is('OWNER');
+  /** Se corrige si no está anulado; el administrador solo mientras el turno siga abierto. */
+  protected canEdit = computed(() => {
+    const p = this.data()?.payment;
+    return !!p && !p.void_status?.match(/APPROVED|REQUESTED/) && (this.owner || p.shift_open);
+  });
+  protected methodList = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
+  protected editing = signal(false);
+  protected busy = signal(false);
+  protected eMethod = signal('');
+  protected eDiscount = signal<number | null>(null);
+  protected eDiscountReason = signal('');
+  protected eTip = signal<number | null>(null);
+  protected eCash = signal<number | null>(null);
+  protected eReference = signal('');
+  protected eReason = signal('');
+  protected eDiscountValue = computed(() => Number(this.eDiscount()) || 0);
+  protected eTotal = computed(() => (this.data()?.order.total ?? 0) - this.eDiscountValue() + (Number(this.eTip()) || 0));
+
+  startEdit() {
+    const p = this.data().payment;
+    this.eMethod.set(p.method);
+    this.eDiscount.set(p.discount || null);
+    this.eDiscountReason.set(p.discount_reason ?? '');
+    this.eTip.set(p.tip || null);
+    this.eCash.set(p.cash_received);
+    this.eReference.set(p.reference ?? '');
+    this.eReason.set('');
+    this.editing.set(true);
+  }
+
+  async saveEdit() {
+    if (!this.eReason().trim()) return this.toast.show('Escribe por qué se corrige el cobro.', true);
+    this.busy.set(true);
+    try {
+      await this.api.patch('/payments/' + this.id, {
+        method: this.eMethod(),
+        discount: this.eDiscountValue(),
+        discountReason: this.eDiscountReason(),
+        tip: Number(this.eTip()) || 0,
+        cashReceived: this.eMethod() === 'EFECTIVO' ? this.eCash() : null,
+        reference: this.eReference(),
+        reason: this.eReason(),
+      });
+      this.editing.set(false);
+      this.toast.show('Cobro corregido.');
+      this.load();
+    } catch (e) {
+      this.toast.fail(e);
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
   constructor() {
+    this.load();
+  }
+
+  private load() {
+    this.image.set(null);
     this.api.get(`/payments/${this.id}/receipt`).then(async (d) => {
       this.data.set(d);
       try {

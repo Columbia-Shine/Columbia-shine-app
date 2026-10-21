@@ -111,7 +111,7 @@ import { Api, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } fr
                 <div class="tile col" style="gap: 8px">
                   <div class="row">
                     <div class="grow" style="flex-basis: 200px">
-                      <div class="fuerte">{{ p.code }} · {{ p.plate }}</div>
+                      <div class="fuerte">{{ p.code }} · {{ p.plate }} @if (p.edited_at) { <span class="etiqueta">Editado</span> }</div>
                       <div class="chico suave">{{ p.service_name }} · {{ methods[p.method] }} · {{ p.created_at | cuando }} · cobró {{ p.created_by_name }}</div>
                     </div>
                     <a class="btn chico" [routerLink]="['/comprobante', p.id]">Comprobante</a>
