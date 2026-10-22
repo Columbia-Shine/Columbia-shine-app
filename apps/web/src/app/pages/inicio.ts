@@ -130,6 +130,9 @@ export class Inicio implements OnDestroy {
     if (d.voidRequests > 0 && this.session.is('OWNER')) {
       out.push({ tag: 'Anulación', tone: 'amarilla', title: `${d.voidRequests} cobro(s) esperan tu decisión`, detail: 'El administrador pidió anular un cobro.', action: 'Revisar', link: '/caja' });
     }
+    for (const s of d.lowStock ?? []) {
+      out.push({ tag: 'Inventario', tone: 'amarilla', title: `${s.name}: quedan ${s.stock} ${s.unit}`, detail: `El mínimo es ${s.min_stock} ${s.unit}. Toca comprar.`, action: 'Ver inventario', link: '/inventario' });
+    }
     for (const o of d.active) {
       const bike = `${o.code} · ${o.plate} · ${o.service_name}`;
       if (o.status === 'WASHING' && o.max_minutes && o.minutes > o.max_minutes) {

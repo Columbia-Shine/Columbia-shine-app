@@ -18,13 +18,14 @@ apps/api/            Node 22 + Express 5 + TypeScript (CommonJS), SQL directo co
   src/routes-operacion.ts  Caja y turnos, inicio (dashboard), agenda, reportes
   src/routes-nomina.ts     Nómina diaria y acuerdos de mínimo (solo OWNER)
   src/routes-finanzas.ts   Gastos por fuera de la caja y cierre del mes (solo OWNER)
+  src/routes-inventario.ts Insumos: compras, conteos, alertas de stock bajo y consumo del mes
 apps/web/            Angular 21, componentes standalone, sin zone.js (todo el estado en signals)
   src/app/core.ts    Api (fetch), Session, Toast, guard only(), pipes money y cuando, utilidades de fecha
   src/app/app.ts     Barra superior y menú según rol
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 013_nomina_caja_gastos.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 014_inventario.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -126,6 +127,13 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Categorías de gasto en `EXPENSE_CATEGORIES` (API y `core.ts`): los GASTO de caja exigen categoría (`cash_movements.category`).
 - Gastos pagados por fuera de la caja (arriendo por transferencia, etc.): tabla `expenses`, se registran en `/mes`.
 - `/mes` (solo OWNER, menú "Mes"): ventas, motos, ticket, gastos por categoría (caja + por fuera), nómina (comisión de lo cobrado + ajustes; las propinas no son costo del negocio) y "te queda" = ventas − gastos − nómina, comparado con el mes anterior.
+
+## Inventario
+
+- `/inventario` (OWNER y ADMIN): insumos (`supplies`) con stock, mínimo y costo por unidad (el costo solo lo ve el OWNER; solo el OWNER crea insumos y cambia mínimos).
+- Compra (`supply_moves` COMPRA): suma stock, actualiza el costo por unidad y registra el gasto de Insumos: en la caja del turno si se pagó con efectivo de la caja, o en `expenses` si se pagó por fuera.
+- Conteo (`supply_moves` CONTEO): ajusta al stock real; la diferencia negativa es lo gastado. El consumo del mes sale de los conteos, valorizado, y da el costo real por moto.
+- Alerta en Inicio cuando un insumo está en su mínimo o por debajo (`lowStock` del dashboard).
 
 ## Comprobante de venta
 

@@ -202,6 +202,8 @@ operacion.get('/dashboard', auth(...MANAGERS), async (req, res) => {
   res.json({
     sales, bikes, ticket: bikes ? Math.round(sales / bikes) : 0,
     active, byService, byMethod, team, voidRequests, bookings,
+    // Insumos en el mínimo o por debajo
+    lowStock: await q(`select name, unit, stock::float as stock, min_stock::float as min_stock from supplies where active and min_stock > 0 and stock <= min_stock order by name`),
     shift: shift ? { id: shift.id, opened_at: shift.opened_at } : null,
   });
 });

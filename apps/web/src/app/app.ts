@@ -63,6 +63,7 @@ export class App {
       { path: '/caja', label: 'Caja' },
       { path: '/agenda', label: 'Agenda' },
       { path: '/clientes', label: 'Clientes' },
+      { path: '/inventario', label: 'Inventario' },
       { path: '/reportes', label: role === 'OWNER' ? 'Reportes' : this.session.user()?.washes === false ? 'Reporte de hoy' : 'Mi mes y hoy' },
     ];
     return role === 'OWNER' ? [...base, { path: '/mes', label: 'Mes' }, { path: '/nomina', label: 'Nómina' }, { path: '/ajustes', label: 'Ajustes' }] : base;

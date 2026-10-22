@@ -6,6 +6,7 @@ import { HttpError, username } from './auth';
 import { migrate, one, pool, q } from './db';
 import { cuentas } from './routes-cuentas';
 import { finanzas } from './routes-finanzas';
+import { inventario } from './routes-inventario';
 import { nomina } from './routes-nomina';
 import { operacion } from './routes-operacion';
 import { ordenes } from './routes-ordenes';
@@ -40,7 +41,7 @@ async function start() {
     await pool.query('select 1');
     res.json({ ok: true });
   });
-  api.use(cuentas, ordenes, operacion, nomina, finanzas);
+  api.use(cuentas, ordenes, operacion, nomina, finanzas, inventario);
   api.use((_req, _res) => {
     throw new HttpError(404, 'Ruta no encontrada.');
   });
