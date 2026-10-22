@@ -7,7 +7,7 @@ export const ordenes = Router();
 const ORDER_SELECT = `
   select o.id, 'CS-' || lpad(o.number::text, 6, '0') as code, o.status, o.total, o.notes,
     o.created_at, o.started_at, o.finished_at, o.ready_at, o.delivered_at, o.cancel_reason, o.notified_at,
-    b.id as bike_id, b.plate, b.brand, b.model, b.color,
+    b.id as bike_id, b.plate, b.brand, b.model, b.color, b.no_plate,
     c.id as customer_id, c.name as customer_name, c.phone as customer_phone, c.pending as customer_pending,
     s.name as service_name, s.min_minutes, s.max_minutes, s.steps,
     w.id as washer_id, w.name as washer_name,
@@ -194,13 +194,16 @@ const MAX_PHOTO_BYTES = 1_500_000;
 
 ordenes.post('/orders', auth(...MANAGERS), async (req, res) => {
   const b = req.body ?? {};
-  const plate = normPlate(b.plate);
-  need(plate.length >= 5 && plate.length <= 7, 'Revisa la placa.');
+  // Moto sin placa: se le asigna un código interno (SP0001…) y se pide cómo reconocerla
+  const noPlate = b.noPlate === true;
+  const plate = noPlate ? '' : normPlate(b.plate);
+  need(noPlate || (plate.length >= 5 && plate.length <= 7), 'Revisa la placa.');
+  if (noPlate) need(optText(b.brand, 40) && optText(b.bikeNote, 200), 'Para una moto sin placa escribe la marca y cómo reconocerla (color, detalles).');
   const extraIds: string[] = Array.isArray(b.extraIds) ? b.extraIds.map(String) : [];
   const photos: string[] = Array.isArray(b.photos) ? b.photos.slice(0, MAX_PHOTOS) : [];
 
   const id = await tx(async (c) => {
-    let bike = await one('select b.*, c.pending from bikes b join customers c on c.id = b.customer_id where b.plate = $1', [plate], c);
+    let bike = noPlate ? undefined : await one('select b.*, c.pending from bikes b join customers c on c.id = b.customer_id where b.plate = $1', [plate], c);
     if (bike?.pending && optText(b.customerName, 80)) {
       // Volvió el cliente de afán: se completan sus datos al recibir la moto
       bike.customer_id = await completeCustomer(bike.customer_id, { name: b.customerName, phone: b.customerPhone }, req.user.id, c);
@@ -221,9 +224,13 @@ ordenes.post('/orders', auth(...MANAGERS), async (req, res) => {
           (phone ? await one('select id from customers where phone = $1', [phone], c) : undefined) ??
           (await one('insert into customers (name, phone) values ($1, $2) returning id', [name, phone], c))!;
       }
+      const code = noPlate ? (await one(`select 'SP' || lpad(nextval('no_plate_seq')::text, 4, '0') as code`, [], c)).code : plate;
       bike = await one(
-        'insert into bikes (customer_id, plate, brand, model, color, year) values ($1, $2, $3, $4, $5, $6) returning *',
-        [customer.id, plate, optText(b.brand, 40), optText(b.model, 40), optText(b.color, 30), b.year ? int(b.year, 'El año', 1950) : null],
+        'insert into bikes (customer_id, plate, brand, model, color, year, notes, no_plate) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *',
+        [
+          customer.id, code, optText(b.brand, 40), optText(b.model, 40), optText(b.color, 30), b.year ? int(b.year, 'El año', 1950) : null,
+          noPlate ? 'Sin placa: ' + optText(b.bikeNote, 200) : null, noPlate,
+        ],
         c,
       );
     }
@@ -256,7 +263,7 @@ ordenes.post('/orders', auth(...MANAGERS), async (req, res) => {
       await c.query('insert into order_photos (order_id, mime, data) values ($1, $2, $3)', [order.id, m[1], data]);
     }
     if (b.bookingId) await c.query(`update bookings set status = 'ARRIVED' where id = $1`, [String(b.bookingId)]);
-    await audit(req.user.id, 'ORDEN_CREADA', 'order', order.id, { placa: plate, total }, c);
+    await audit(req.user.id, 'ORDEN_CREADA', 'order', order.id, { placa: bike.plate, total }, c);
     return order.id as string;
   });
   res.status(201).json(await loadOrder(id));

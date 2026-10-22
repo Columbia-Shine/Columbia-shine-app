@@ -16,9 +16,18 @@ const MAX_PHOTOS = 6;
           <section class="card col">
             <label class="rotulo" for="placa">1 · Placa</label>
             <div class="row">
-              <input id="placa" class="campo grande" style="width: 220px; text-transform: uppercase; letter-spacing: 0.08em" maxlength="8"
-                autocomplete="off" [ngModel]="plate()" (ngModelChange)="onPlate($event)" />
-              @if (bike(); as b) {
+              @if (noPlate()) {
+                <div class="tile grow" style="flex-basis: 260px">
+                  <div class="fuerte">Moto sin placa</div>
+                  <div class="chico suave">Se le asigna un código interno (SP0001…) que sale en la orden y el comprobante.</div>
+                </div>
+              } @else {
+                <input id="placa" class="campo grande" style="width: 220px; text-transform: uppercase; letter-spacing: 0.08em" maxlength="8"
+                  autocomplete="off" [ngModel]="plate()" (ngModelChange)="onPlate($event)" />
+              }
+              <button class="pastilla" [attr.aria-pressed]="noPlate()" (click)="toggleNoPlate()">Moto sin placa</button>
+              @if (noPlate()) {
+              } @else if (bike(); as b) {
                 <div class="tile grow" style="flex-basis: 260px">
                   <div class="fuerte">{{ b.brand }} {{ b.model }} @if (b.color) { · {{ b.color }} }</div>
                   <div class="chico suave">
@@ -40,7 +49,7 @@ const MAX_PHOTOS = 6;
                 </div>
               </div>
             }
-            @if (searched() && !bike()) {
+            @if ((searched() || noPlate()) && !bike()) {
               <div class="row">
                 <button class="pastilla" [attr.aria-pressed]="mode() === 'nuevo'" (click)="setMode('nuevo')">Cliente nuevo</button>
                 <button class="pastilla" [attr.aria-pressed]="mode() === 'existente'" (click)="setMode('existente')">Ya es cliente: otra moto</button>
@@ -78,7 +87,10 @@ const MAX_PHOTOS = 6;
                   <div><label for="cn">Nombre del cliente</label><input id="cn" class="campo" [(ngModel)]="customerName" autocomplete="off" /></div>
                   <div><label for="cp">Celular</label><input id="cp" class="campo" type="tel" inputmode="numeric" [(ngModel)]="customerPhone" autocomplete="off" /></div>
                 }
-                <div><label for="br">Marca</label><input id="br" class="campo" [(ngModel)]="brand" /></div>
+                <div><label for="br">Marca{{ noPlate() ? ' (obligatoria)' : '' }}</label><input id="br" class="campo" [(ngModel)]="brand" /></div>
+                @if (noPlate()) {
+                  <div><label for="bn">Cómo reconocerla (color, detalles)</label><input id="bn" class="campo" placeholder="Ej.: roja, sticker en el tanque" [(ngModel)]="bikeNote" /></div>
+                }
               </div>
             }
           </section>
@@ -186,6 +198,9 @@ export class Recepcion {
   protected customerName = signal('');
   protected customerPhone = signal('');
   protected brand = signal('');
+  /** Moto sin placa: no se busca placa y se pide cómo reconocerla */
+  protected noPlate = signal(false);
+  protected bikeNote = signal('');
   protected serviceId = signal('');
   protected extraIds = signal<string[]>([]);
   protected photos = signal<string[]>([]);
@@ -285,6 +300,8 @@ export class Recepcion {
     this.bike.set(null);
     this.searched.set(false);
     this.brand.set('');
+    this.noPlate.set(false);
+    this.bikeNote.set('');
     this.extraIds.set([]);
     this.photos.set([]);
     this.notes.set('');
@@ -296,9 +313,20 @@ export class Recepcion {
     setTimeout(() => document.getElementById('placa')?.focus(), 300);
   }
 
+  toggleNoPlate() {
+    this.noPlate.update((v) => !v);
+    this.plate.set('');
+    this.bike.set(null);
+    this.searched.set(false);
+  }
+
   async create(another = false) {
-    if (this.plate().length < 5) return this.toast.show('Escribe la placa.', true);
-    if (!this.searched()) return this.toast.show('Espera un momento: estamos buscando la placa.', true);
+    if (this.noPlate()) {
+      if (!this.brand().trim() || !this.bikeNote().trim()) return this.toast.show('Escribe la marca y cómo reconocer la moto sin placa.', true);
+    } else {
+      if (this.plate().length < 5) return this.toast.show('Escribe la placa o marca "Moto sin placa".', true);
+      if (!this.searched()) return this.toast.show('Espera un momento: estamos buscando la placa.', true);
+    }
     if (!this.serviceId()) return this.toast.show('Elige el servicio.', true);
     const isNew = !this.bike();
     if (isNew && this.mode() === 'existente' && !this.owner()) return this.toast.show('Busca y elige el cliente dueño de la moto.', true);
@@ -306,6 +334,8 @@ export class Recepcion {
     try {
       const order = await this.api.post('/orders', {
         plate: this.plate(),
+        noPlate: this.noPlate(),
+        bikeNote: this.bikeNote(),
         rush: isNew && this.mode() === 'afan',
         customerId: isNew && this.mode() === 'existente' ? this.owner()?.id : null,
         customerName: this.customerName(),

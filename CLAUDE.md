@@ -23,7 +23,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 011_recuperar_clientes.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 012_express_y_sin_placa.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -90,6 +90,10 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - `completeCustomer()` en `routes-ordenes.ts`: si el celular ya es de otro cliente y el actual es de afán, los une (motos, órdenes y reservas pasan al existente y el de afán se borra). Con un cliente normal, un celular repetido sigue siendo error.
 - Queda en `audit_log` como `CLIENTE_COMPLETADO` o `CLIENTE_UNIDO`.
 
+## Motos sin placa
+
+- En Recepción, "Moto sin placa": se le asigna un código interno `SP0001`, `SP0002`… (secuencia `no_plate_seq`, `bikes.no_plate = true`) y se pide la marca y cómo reconocerla (queda en `bikes.notes`). Con ese código se busca la próxima vez o se recibe desde la ficha del cliente.
+
 ## Varias motos por cliente
 
 - Un cliente puede tener varias motos (`bikes.customer_id`). El cliente las agrega al agendar; en el local, con una placa nueva se elige "Ya es cliente: otra moto", se busca por nombre, celular o placa y se envía `customerId` en `POST /orders`.
@@ -147,6 +151,7 @@ Precios vigentes en producción (octubre 2026). Las migraciones siembran los pre
 
 | Servicio | Precio | Tiempo objetivo | Costo directo |
 | --- | --- | --- | --- |
+| Shine Express (solo quitar barro: agua y trapo) | $10.000 | 10–15 min | $1.000 (estimado) |
 | Shine Basic | $16.000 | 20–25 min | $5.600 |
 | Shine Premium | $26.000 | 30–40 min | $8.900 |
 | Shine Detail (recomendado) | $40.000 | 60–75 min | $17.100 |
