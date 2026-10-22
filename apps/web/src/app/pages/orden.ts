@@ -238,8 +238,18 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
                 <div class="row between"><span [class.fuerte]="i.kind === 'BASE'" [class.suave]="i.kind !== 'BASE'">{{ i.name }}</span><span class="num">{{ i.price | money }}</span></div>
               }
             </div>
-            @if (discount() > 0 || covered() > 0) {
-              <div class="row between sep"><span>Subtotal</span><span class="num">{{ o.total | money }}</span></div>
+            @for (x of others(); track x.id) {
+              <div class="sep col" style="gap: 6px">
+                <div class="row between chico suave"><span>Orden {{ x.code }}</span><span>Lavó {{ x.washer_name || '—' }}</span></div>
+                <div class="placa" style="font-size: 22px">{{ x.plate }}</div>
+                @for (i of x.items; track i.id) {
+                  <div class="row between"><span [class.fuerte]="i.kind === 'BASE'" [class.suave]="i.kind !== 'BASE'">{{ i.name }}</span><span class="num">{{ i.price | money }}</span></div>
+                }
+                <button class="btn chico" style="align-self: flex-start" (click)="removeFromGroup(x.id)">Quitar de este cobro</button>
+              </div>
+            }
+            @if (discount() > 0 || covered() > 0 || others().length) {
+              <div class="row between sep"><span>Subtotal</span><span class="num">{{ total() | money }}</span></div>
             }
             @if (covered() > 0) {
               <div class="row between amarillo"><span>Cubierto por membresía</span><span class="num">−{{ covered() | money }}</span></div>
@@ -247,7 +257,7 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
             @if (discount() > 0) {
               <div class="row between amarillo"><span>Descuento</span><span class="num">−{{ discount() | money }}</span></div>
             }
-            <div class="row between sep"><span class="fuerte">Total</span><span class="total" style="font-size: 40px">{{ o.total - covered() - discount() | money }}</span></div>
+            <div class="row between sep"><span class="fuerte">Total{{ others().length ? ' (' + (others().length + 1) + ' motos)' : '' }}</span><span class="total" style="font-size: 40px">{{ total() - covered() - discount() | money }}</span></div>
             <a class="btn chico" [routerLink]="['/ordenes', o.id]">Agregar adicional o ver la orden</a>
           </section>
 
@@ -256,7 +266,13 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
               @if (!ready()) {
                 <div class="aviso chico">Esta moto está "{{ status[o.status] }}". Se registra el pago y la orden sigue su flujo; cuando quede lista, la entregas desde la orden.</div>
               }
-              @if (o.membership; as m) {
+              @for (x of suggestions(); track x.id) {
+                <div class="aviso row between">
+                  <span><span class="fuerte amarillo">{{ o.customer_name }}</span> también tiene la moto {{ x.plate }} por cobrar ({{ x.total | money }}).</span>
+                  <button class="btn chico primario" (click)="addToGroup(x.id)">Cobrar juntas</button>
+                </div>
+              }
+              @if (o.membership && !others().length; as m) {
                 <div class="aviso col" style="gap: 8px">
                   <div><span class="fuerte amarillo">Membresía {{ m.name }}:</span> quedan {{ m.remaining }} de {{ m.washes }} lavados de {{ m.service_name }}, hasta el {{ dayName(m.ends_on) }}.</div>
                   @if (canUseMembership()) {
@@ -350,12 +366,19 @@ export class Cobro {
   private api = inject(Api);
   private toast = inject(Toast);
   private router = inject(Router);
-  private id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
+  private route = inject(ActivatedRoute);
+  private id = this.route.snapshot.paramMap.get('id')!;
 
   protected methods = METHODS;
   protected names = METHOD_NAMES;
   protected status = STATUS_NAMES;
   protected order = signal<any | null>(null);
+  /** Cobro conjunto: las otras motos del mismo cliente que se cobran en este pago */
+  protected others = signal<any[]>([]);
+  /** Otras motos del mismo cliente sin cobrar, para proponer cobrarlas juntas */
+  private pending = signal<any[]>([]);
+  protected suggestions = computed(() => this.pending().filter((x) => !this.others().some((y) => y.id === x.id)));
+  protected total = computed(() => (this.order()?.total ?? 0) + this.others().reduce((a, x) => a + x.total, 0));
   protected method = signal('');
   protected tip = signal<number | null>(null);
   protected cash = signal<number | null>(null);
@@ -372,7 +395,8 @@ export class Cobro {
   protected useMembership = signal(false);
   protected canUseMembership = computed(() => {
     const o = this.order();
-    return !!o?.membership && o.membership.remaining > 0 && o.membership.service_id === o.service_id;
+    // En un cobro de varias motos no se usa membresía (se cobra cada una aparte si la tiene)
+    return !this.others().length && !!o?.membership && o.membership.remaining > 0 && o.membership.service_id === o.service_id;
   });
   /** Lo que cubre la membresía: el precio del servicio base de la orden. */
   protected covered = computed(() =>
@@ -381,13 +405,13 @@ export class Cobro {
   protected dayName = dayLabel;
   /** Descuento en pesos, nunca mayor que el total. */
   protected discount = computed(() => {
-    const total = (this.order()?.total ?? 0) - this.covered();
+    const total = this.total() - this.covered();
     const v = Number(this.discountInput()) || 0;
     const pesos = this.discountMode() === 'porcentaje' ? Math.round((total * Math.min(v, 100)) / 100) : v;
     return Math.min(Math.max(pesos, 0), total);
   });
   /** Total a recibir: servicio menos descuento, más propina. */
-  protected due = computed(() => (this.order()?.total ?? 0) - this.covered() - this.discount() + (Number(this.tip()) || 0));
+  protected due = computed(() => this.total() - this.covered() - this.discount() + (Number(this.tip()) || 0));
   protected bills = computed(() => {
     const due = this.due();
     const options = [due, ...[20000, 50000, 100000, 200000].filter((b) => b > due)];
@@ -396,11 +420,26 @@ export class Cobro {
   protected change = computed(() => Math.max(0, (Number(this.cash()) || 0) - this.due()));
 
   constructor() {
-    this.api.get('/orders/' + this.id).then((o) => {
+    const extra = (this.route.snapshot.queryParamMap.get('con') ?? '').split(',').filter((x) => x && x !== this.id);
+    this.api.get('/orders/' + this.id).then(async (o) => {
       this.order.set(o);
+      const all: any[] = await this.api.get('/orders?scope=active');
+      const same = all.filter((x) => x.customer_id === o.customer_id && x.id !== o.id && !x.payment_id);
+      this.pending.set(same);
+      this.others.set(same.filter((x) => extra.includes(x.id)));
       // Si tiene membresía que sirve para esta orden, se propone usarla
       this.useMembership.set(this.canUseMembership());
     }, this.toast.fail);
+  }
+
+  addToGroup(id: string) {
+    const x = this.pending().find((p) => p.id === id);
+    if (x) this.others.update((o) => [...o, x]);
+    this.useMembership.set(false);
+  }
+
+  removeFromGroup(id: string) {
+    this.others.update((o) => o.filter((x) => x.id !== id));
   }
 
   async pay() {
@@ -409,7 +448,7 @@ export class Cobro {
     if (this.discount() > 0 && !this.discountReason().trim()) return this.toast.show('Escribe el motivo del descuento.', true);
     this.busy.set(true);
     try {
-      const out = await this.api.post(`/orders/${this.id}/pay`, {
+      const body = {
         useMembership: this.covered() > 0,
         discount: this.discount(),
         discountReason: this.discountReason(),
@@ -417,8 +456,11 @@ export class Cobro {
         tip: Number(this.tip()) || 0,
         cashReceived: this.method() === 'EFECTIVO' ? cash : null,
         reference: this.reference(),
-      });
-      const done = out.delivered ? 'Moto entregada.' : 'La orden sigue su flujo.';
+      };
+      const out = this.others().length
+        ? await this.api.post('/payments/group', { ...body, orderIds: [this.id, ...this.others().map((x) => x.id)] })
+        : await this.api.post(`/orders/${this.id}/pay`, body);
+      const done = out.delivered ? (this.others().length ? 'Las motos listas quedaron entregadas.' : 'Moto entregada.') : 'La orden sigue su flujo.';
       this.toast.show(out.change > 0 ? `Cobro registrado. Devuelve ${money(out.change)}. ${done}` : `Cobro registrado. ${done}`);
       this.router.navigateByUrl('/comprobante/' + out.paymentId);
     } catch (e) {

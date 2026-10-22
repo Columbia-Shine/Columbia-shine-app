@@ -144,7 +144,7 @@ export async function receiptImage(d: any, methods: Record<string, string>, logo
 
   row('Cliente', o.customer_name);
   if (o.customer_phone) row('Celular', o.customer_phone);
-  row('Placa', o.plate, { bold: true });
+  row(o.plate.includes(',') ? 'Placas' : 'Placa', o.plate, { bold: true });
   if (o.brand || o.model) row('Moto', `${o.brand ?? ''} ${o.model ?? ''}`.trim());
   if (o.washer_name) row('Lavó', o.washer_name);
 

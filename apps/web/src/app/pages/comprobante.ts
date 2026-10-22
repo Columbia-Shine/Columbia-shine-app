@@ -83,7 +83,7 @@ import { receiptImage } from './comprobante-imagen';
 
           <div class="fila"><span>Cliente</span><span>{{ d.order.customer_name }}</span></div>
           @if (d.order.customer_phone) { <div class="fila"><span>Celular</span><span>{{ d.order.customer_phone }}</span></div> }
-          <div class="fila"><span>Placa</span><span class="fuerte">{{ d.order.plate }}</span></div>
+          <div class="fila"><span>{{ d.order.plate.includes(',') ? 'Placas' : 'Placa' }}</span><span class="fuerte">{{ d.order.plate }}</span></div>
           @if (d.order.brand || d.order.model) { <div class="fila"><span>Moto</span><span>{{ d.order.brand }} {{ d.order.model }}</span></div> }
           @if (d.order.washer_name) { <div class="fila"><span>Lavó</span><span>{{ d.order.washer_name }}</span></div> }
 
@@ -169,7 +169,7 @@ export class Comprobante {
   /** Se corrige si no está anulado; el administrador solo mientras el turno siga abierto. */
   protected canEdit = computed(() => {
     const p = this.data()?.payment;
-    return !!p && !!p.order_id && !p.void_status?.match(/APPROVED|REQUESTED/) && (this.owner || p.shift_open);
+    return !!p && !!p.order_id && !p.group && !p.void_status?.match(/APPROVED|REQUESTED/) && (this.owner || p.shift_open);
   });
   protected methodList = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
   protected editing = signal(false);

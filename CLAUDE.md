@@ -26,7 +26,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 015_membresias.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 016_cobro_conjunto.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -108,6 +108,12 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - **Moto lista**: en la orden (y en el tablero) un botón abre WhatsApp con el mensaje "tu moto está lista" (`readyWhatsapp()` de `core.ts`); se marca `orders.notified_at`. No usa ningún servicio pagado: es un enlace `wa.me`.
 - **Pantalla del local** (`/pantalla`): motos en espera, en lavado y listas, en letra grande, sin menú, se actualiza cada 15 s. Se abre desde Órdenes.
 - **Clientes para recuperar** (Clientes → "Para recuperar"): quienes no vuelven hace 30/45/60/90 días, con celular, sin reserva ni moto en el local. Mensaje editable con {nombre} y {placa}; al escribirles queda `customers.last_contacted_at`.
+
+## Cobro de varias motos (conjunto)
+
+- Un cliente con varias motos paga todo en un solo cobro y un solo comprobante: en Facturar se marcan y "Cobrar juntas", o desde el cobro de una moto ("también tiene la moto X por cobrar"). Ruta `/cobro/:id?con=id2,id3`, API `POST /payments/group`.
+- Cada orden conserva su propio cobro (la comisión es de su lavador), unidos por `payments.group_id`; `payment_groups` guarda medio, efectivo recibido y referencia. El descuento se reparte en proporción al valor de cada moto; la propina va en el primero.
+- Solo motos del mismo cliente. No se usa membresía en un cobro conjunto. No se corrige: anular uno anula todo el grupo.
 
 ## Facturar
 

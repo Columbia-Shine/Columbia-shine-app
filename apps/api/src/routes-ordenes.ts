@@ -418,12 +418,75 @@ ordenes.post('/orders/:id/pay', auth(...MANAGERS), async (req, res) => {
   res.status(201).json(out);
 });
 
+// Cobro conjunto: varias motos del mismo cliente en un solo pago y un solo comprobante.
+// Cada orden queda con su cobro (la comisión es de su lavador); el descuento se reparte y la propina va en el primero.
+ordenes.post('/payments/group', auth(...MANAGERS), async (req, res) => {
+  const b = req.body ?? {};
+  const ids: string[] = Array.isArray(b.orderIds) ? [...new Set(b.orderIds.map(String))] as string[] : [];
+  need(ids.length >= 2, 'Elige al menos dos motos para cobrar juntas.');
+  const method = String(b.method);
+  need(METHODS.includes(method) && method !== 'MEMBRESIA', 'Elige cómo paga.');
+  const tip = b.tip ? int(b.tip, 'La propina') : 0;
+  const out = await tx(async (c) => {
+    // Bloquea las órdenes para que no se cobren dos veces
+    const locked = await q('select id from orders where id = any($1::uuid[]) order by number for update', [ids], c);
+    need(locked.length === ids.length, 'Una de las órdenes ya no existe.', 404);
+    const orders = [];
+    for (const l of locked) orders.push(await loadOrder(l.id, c));
+    for (const o of orders) {
+      need(['WAITING', 'WASHING', 'REVIEW', 'READY'].includes(o.status), `La orden ${o.code} ya está cerrada.`);
+      need(!o.payment_id, `La orden ${o.code} ya fue cobrada.`, 409);
+    }
+    need(new Set(orders.map((o) => o.customer_id)).size === 1, 'Solo se cobran juntas las motos del mismo cliente.');
+    const shift = await openShift(c);
+    need(shift, 'No hay turno abierto. Abre la caja antes de cobrar.');
+    const total = orders.reduce((a, o) => a + o.total, 0);
+    const discount = b.discount ? int(b.discount, 'El descuento') : 0;
+    need(discount <= total, 'El descuento no puede ser mayor que el total.');
+    const discountReason = discount ? text(b.discountReason, 'el motivo del descuento', 200) : null;
+    const amount = total - discount;
+    let cash: number | null = null;
+    if (method === 'EFECTIVO') {
+      const received = b.cashReceived === undefined || b.cashReceived === null ? amount + tip : int(b.cashReceived, 'El efectivo recibido');
+      need(received >= amount + tip, 'El efectivo recibido no alcanza.');
+      cash = received;
+    }
+    const group = await one(
+      'insert into payment_groups (method, cash_received, reference, created_by) values ($1, $2, $3, $4) returning id',
+      [method, cash, optText(b.reference, 40), req.user.id],
+      c,
+    );
+    // El descuento se reparte en proporción al valor de cada moto; el último absorbe el redondeo
+    let left = discount;
+    const paymentIds: string[] = [];
+    for (const [i, o] of orders.entries()) {
+      const share = i === orders.length - 1 ? left : Math.round((discount * o.total) / total);
+      left -= share;
+      const p = await one(
+        `insert into payments (order_id, shift_id, method, amount, tip, reference, created_by, discount, discount_reason, group_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+        [o.id, shift.id, method, o.total - share, i === 0 ? tip : 0, optText(b.reference, 40), req.user.id, share, share ? discountReason : null, group.id],
+        c,
+      );
+      paymentIds.push(p.id);
+      if (o.status === 'READY' || o.status === 'REVIEW') await c.query(`update orders set status = 'DELIVERED', delivered_at = now() where id = $1`, [o.id]);
+    }
+    await audit(
+      req.user.id, 'COBRO_CONJUNTO', 'payment', paymentIds[0],
+      { ordenes: orders.map((o) => o.code), placas: orders.map((o) => o.plate), medio: method, valor: amount, propina: tip, ...(discount ? { descuento: discount, motivo: discountReason } : {}) },
+      c,
+    );
+    return { paymentId: paymentIds[0], change: cash === null ? 0 : cash - amount - tip, delivered: orders.filter((o) => o.status === 'READY' || o.status === 'REVIEW').length };
+  });
+  res.status(201).json(out);
+});
+
 ordenes.get('/payments', auth(...MANAGERS), async (req, res) => {
   const shift = await openShift();
   // Con turno abierto se muestran sus cobros; sin turno, los de hoy
   const where = shift ? 'p.shift_id = $1' : `${localDate('p.created_at')} = ${TODAY} and $1::text is null`;
   const rows = await q(
-    `select p.id, p.method, p.amount, p.tip, p.discount, p.covered, p.created_at, p.void_status, p.void_reason, p.edited_at,
+    `select p.id, p.method, p.amount, p.tip, p.discount, p.covered, p.created_at, p.void_status, p.void_reason, p.edited_at, p.group_id,
        coalesce('CS-' || lpad(o.number::text, 6, '0'), 'Membresía') as code, o.id as order_id, b.plate,
        coalesce(s.name, 'Membresía ' || mb.name) as service_name, p.order_id is null as membership_sale,
        u.name as created_by_name, r.name as void_requested_by_name
@@ -441,13 +504,39 @@ ordenes.get('/payments', auth(...MANAGERS), async (req, res) => {
 // Comprobante de venta de un cobro (no es factura electrónica)
 ordenes.get('/payments/:id/receipt', auth(...MANAGERS), async (req, res) => {
   const p = await one(
-    `select p.id, p.order_id, p.method, p.amount, p.tip, p.discount, p.discount_reason, p.covered, p.cash_received, p.reference, p.created_at, p.void_status,
+    `select p.id, p.order_id, p.group_id, p.method, p.amount, p.tip, p.discount, p.discount_reason, p.covered, p.cash_received, p.reference, p.created_at, p.void_status,
        p.edited_at, p.edit_reason, e.name as edited_by_name, u.name as created_by_name,
        (select s.closed_at is null from shifts s where s.id = p.shift_id) as shift_open
      from payments p join users u on u.id = p.created_by left join users e on e.id = p.edited_by where p.id = $1`,
     [String(req.params.id)],
   );
   need(p, 'Cobro no encontrado.', 404);
+  if (p.group_id) {
+    const g = await one('select * from payment_groups where id = $1', [p.group_id]);
+    const rows = await q('select * from payments where group_id = $1', [p.group_id]);
+    const orders = [];
+    for (const r of rows) orders.push(await loadOrder(r.order_id));
+    orders.sort((a, b) => a.code.localeCompare(b.code));
+    const sum = (k: string) => rows.reduce((a, r) => a + Number(r[k] ?? 0), 0);
+    const first = orders[0];
+    return res.json({
+      payment: {
+        ...p, id: p.id, method: g.method, amount: sum('amount'), tip: sum('tip'), discount: sum('discount'), covered: 0,
+        discount_reason: rows.find((r) => r.discount_reason)?.discount_reason ?? null, cash_received: g.cash_received, reference: g.reference,
+        void_status: rows.some((r) => r.void_status === 'APPROVED') ? 'APPROVED' : rows.some((r) => r.void_status === 'REQUESTED') ? 'REQUESTED' : null,
+        group: true,
+      },
+      order: {
+        ...first,
+        code: orders.map((o) => o.code).join(' + '),
+        plate: orders.map((o) => o.plate).join(', '),
+        brand: '', model: '',
+        washer_name: [...new Set(orders.map((o) => o.washer_name).filter(Boolean))].join(', ') || null,
+        total: orders.reduce((a, o) => a + o.total, 0),
+        items: orders.flatMap((o) => o.items.map((i: any) => ({ ...i, name: `${o.plate} · ${i.name}` }))),
+      },
+    });
+  }
   if (p.order_id) return res.json({ payment: p, order: await loadOrder(p.order_id) });
   const m = await one(
     `select m.*, m.ends_on::text as until, s.name as service_name, b.plate, b.brand, b.model, c.name as customer_name, c.phone as customer_phone
@@ -477,6 +566,7 @@ ordenes.patch('/payments/:id', auth(...MANAGERS), async (req, res) => {
     // El administrador corrige mientras el turno está abierto; después, solo el propietario
     need(req.user.role === 'OWNER' || !shift.closed_at, 'El turno de este cobro ya se cerró: solo el propietario puede corregirlo.', 403);
     need(p.order_id, 'Una venta de membresía no se corrige: anúlala desde Caja y véndela de nuevo.');
+    need(!p.group_id, 'Un cobro de varias motos no se corrige: anúlalo desde Caja y cóbralo de nuevo.');
     const o = await loadOrder(p.order_id, c);
 
     const discount = b.discount === undefined ? p.discount : b.discount ? int(b.discount, 'El descuento') : 0;
@@ -531,13 +621,15 @@ ordenes.post('/payments/:id/void', auth(...MANAGERS), async (req, res) => {
   need(p.void_status !== 'REQUESTED', 'Ya hay una solicitud esperando al propietario.');
   const owner = req.user.role === 'OWNER';
   await tx(async (c) => {
+    // En un cobro de varias motos se anulan todas juntas
+    const all = p.group_id ? await q('select * from payments where group_id = $1', [p.group_id], c) : [p];
     await c.query(
       `update payments set void_status = $2, void_reason = $3, void_requested_by = $4, void_requested_at = now(),
          void_resolved_by = $5, void_resolved_at = case when $5::uuid is null then null else now() end
-       where id = $1`,
-      [p.id, owner ? 'APPROVED' : 'REQUESTED', reason, req.user.id, owner ? req.user.id : null],
+       where id = any($1::uuid[])`,
+      [all.map((x: any) => x.id), owner ? 'APPROVED' : 'REQUESTED', reason, req.user.id, owner ? req.user.id : null],
     );
-    if (owner) await reopenOrder(p.order_id, c, p.membership_id);
+    if (owner) for (const x of all) await reopenOrder(x.order_id, c, x.membership_id);
     await audit(req.user.id, owner ? 'COBRO_ANULADO' : 'ANULACION_SOLICITADA', 'payment', p.id, { motivo: reason, valor: p.amount }, c);
   });
   res.json({ status: owner ? 'APPROVED' : 'REQUESTED' });
@@ -548,10 +640,11 @@ ordenes.post('/payments/:id/void-resolve', auth('OWNER'), async (req, res) => {
   const p = await one('select * from payments where id = $1', [req.params.id]);
   need(p && p.void_status === 'REQUESTED', 'No hay una solicitud pendiente para este cobro.', 404);
   await tx(async (c) => {
-    await c.query('update payments set void_status = $2, void_resolved_by = $3, void_resolved_at = now() where id = $1', [
-      p.id, approve ? 'APPROVED' : 'REJECTED', req.user.id,
+    const all = p.group_id ? await q('select * from payments where group_id = $1', [p.group_id], c) : [p];
+    await c.query('update payments set void_status = $2, void_resolved_by = $3, void_resolved_at = now() where id = any($1::uuid[])', [
+      all.map((x: any) => x.id), approve ? 'APPROVED' : 'REJECTED', req.user.id,
     ]);
-    if (approve) await reopenOrder(p.order_id, c, p.membership_id);
+    if (approve) for (const x of all) await reopenOrder(x.order_id, c, x.membership_id);
     await audit(req.user.id, approve ? 'COBRO_ANULADO' : 'ANULACION_RECHAZADA', 'payment', p.id, { motivo: p.void_reason, valor: p.amount }, c);
   });
   res.json({ status: approve ? 'APPROVED' : 'REJECTED' });

@@ -1,6 +1,6 @@
 import { Component, computed, inject, OnDestroy, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { Api, METHOD_NAMES, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../core';
 
 /** Facturar: todo lo que falta por cobrar, sin importar en qué estado va la moto, y lo cobrado en el turno. */
@@ -31,10 +31,11 @@ import { Api, METHOD_NAMES, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../
         </div>
         <div class="tabla-caja">
           <table style="min-width: 640px">
-            <thead><tr><th>Orden</th><th>Placa</th><th>Cliente</th><th>Servicio</th><th>Estado</th><th>Lavador</th><th class="der">Total</th><th></th></tr></thead>
+            <thead><tr><th></th><th>Orden</th><th>Placa</th><th>Cliente</th><th>Servicio</th><th>Estado</th><th>Lavador</th><th class="der">Total</th><th></th></tr></thead>
             <tbody>
               @for (o of pending(); track o.id) {
                 <tr>
+                  <td><input type="checkbox" class="elegir" [attr.aria-label]="'Elegir ' + o.plate" [checked]="picked().includes(o.id)" (change)="pick(o.id)" /></td>
                   <td><a [routerLink]="['/ordenes', o.id]">{{ o.code }}</a></td>
                   <td class="fuerte">{{ o.plate }}</td>
                   <td>{{ o.customer_name }}</td>
@@ -45,11 +46,22 @@ import { Api, METHOD_NAMES, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../
                   <td class="der"><a class="btn chico primario" [routerLink]="['/cobro', o.id]">Cobrar</a></td>
                 </tr>
               } @empty {
-                <tr><td colspan="8" class="suave">{{ term() ? 'Nada coincide con la búsqueda.' : 'No hay motos pendientes de cobro.' }}</td></tr>
+                <tr><td colspan="9" class="suave">{{ term() ? 'Nada coincide con la búsqueda.' : 'No hay motos pendientes de cobro.' }}</td></tr>
               }
             </tbody>
           </table>
         </div>
+        @if (picked().length) {
+          <div class="row between">
+            <span class="chico suave">{{ picked().length }} moto(s) elegidas{{ sameCustomer() ? '' : ' · deben ser del mismo cliente' }}</span>
+            <div class="row">
+              <button class="btn chico" (click)="picked.set([])">Quitar selección</button>
+              <button class="btn chico primario" [disabled]="picked().length < 2 || !sameCustomer()" (click)="payTogether()">Cobrar juntas ({{ picked().length }})</button>
+            </div>
+          </div>
+        } @else {
+          <p class="chico suave">Para cobrar varias motos de un mismo cliente en un solo pago, márcalas y toca "Cobrar juntas".</p>
+        }
       </section>
 
       <section class="card col">
@@ -66,7 +78,7 @@ import { Api, METHOD_NAMES, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../
                   <td>{{ p.created_at | cuando }}</td>
                   <td>@if (p.order_id) { <a [routerLink]="['/ordenes', p.order_id]">{{ p.code }}</a> } @else { {{ p.service_name }} }</td>
                   <td class="fuerte">{{ p.plate }}</td>
-                  <td>{{ methods[p.method] }} @if (p.edited_at) { <span class="etiqueta">Editado</span> }</td>
+                  <td>{{ methods[p.method] }} @if (p.edited_at) { <span class="etiqueta">Editado</span> } @if (p.group_id) { <span class="etiqueta">Varias motos</span> }</td>
                   <td>{{ p.created_by_name }}</td>
                   <td class="der fuerte">
                     @if (p.void_status === 'APPROVED') { <span class="etiqueta" style="margin-right: 6px">Anulado</span> }
@@ -84,10 +96,14 @@ import { Api, METHOD_NAMES, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../
       </section>
     </main>
   `,
+  styles: `
+    .elegir { width: 22px; height: 22px; accent-color: var(--amarillo); }
+  `,
 })
 export class Facturar implements OnDestroy {
   private api = inject(Api);
   private toast = inject(Toast);
+  private router = inject(Router);
 
   protected names = STATUS_NAMES;
   protected methods = METHOD_NAMES;
@@ -102,6 +118,19 @@ export class Facturar implements OnDestroy {
     const t = this.term().trim().toLowerCase();
     return !t || values.some((v) => (v ?? '').toLowerCase().includes(t));
   };
+
+  /** Motos marcadas para cobrar juntas */
+  protected picked = signal<string[]>([]);
+  protected sameCustomer = computed(() => new Set(this.orders().filter((o) => this.picked().includes(o.id)).map((o) => o.customer_id)).size <= 1);
+
+  pick(id: string) {
+    this.picked.update((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  }
+
+  payTogether() {
+    const [first, ...rest] = this.picked();
+    this.router.navigate(['/cobro', first], { queryParams: { con: rest.join(',') } });
+  }
 
   protected pending = computed(() => this.orders().filter((o) => !o.payment_id && this.matches(o.plate, o.customer_name, o.code)));
   protected pendingTotal = computed(() => this.pending().reduce((a, o) => a + o.total, 0));
