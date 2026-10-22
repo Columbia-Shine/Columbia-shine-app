@@ -35,6 +35,9 @@ const MAX_PHOTOS = 6;
                     @if (b.last_visit) { · última: {{ b.last_visit.service }}, {{ b.last_visit.date | cuando: 'fecha' }} }
                   </div>
                   @if (b.notes) { <div class="chico amarillo">Nota de la moto: {{ b.notes }}</div> }
+                  @if (b.membership; as m) {
+                    <div class="chico amarillo">Membresía {{ m.name }}: quedan {{ m.remaining }} lavados de {{ m.service_name }}. Se usa al cobrar.</div>
+                  }
                 </div>
               } @else if (searched()) {
                 <span class="etiqueta azul">Moto nueva: completa los datos</span>
@@ -242,6 +245,8 @@ export class Recepcion {
         if (this.plate() !== plate) return;
         this.bike.set(found);
         this.searched.set(true);
+        // Con membresía vigente se propone su servicio
+        if (found?.membership?.remaining > 0 && !this.serviceId()) this.serviceId.set(found.membership.service_id);
       } catch (e) {
         this.toast.fail(e);
       }

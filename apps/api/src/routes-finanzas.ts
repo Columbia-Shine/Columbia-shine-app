@@ -84,8 +84,8 @@ async function monthFigures(month: string) {
   // Nómina: comisión de lo cobrado de cada lavador + ajustes de acuerdos pagados (las propinas son de ellos, no del negocio)
   const pct = await setting('commission_pct', 45);
   const byWasher = await q(
-    `select w.name, count(*) as n, sum(p.amount) as washed from payments p join orders o on o.id = p.order_id join users w on w.id = o.washer_id
-     where ${inMonth} group by w.name order by sum(p.amount) desc`,
+    `select w.name, count(*) as n, sum(p.amount + p.covered) as washed from payments p join orders o on o.id = p.order_id join users w on w.id = o.washer_id
+     where ${inMonth} group by w.name order by sum(p.amount + p.covered) desc`,
     P,
   );
   const commission = byWasher.reduce((a, w) => a + Math.round((Number(w.washed) * pct) / 100), 0);

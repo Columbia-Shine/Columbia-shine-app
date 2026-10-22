@@ -2,7 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Api, minutesSince, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../core';
+import { Api, dayLabel, METHOD_NAMES, minutesSince, MoneyInput, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../core';
 
 @Component({
   selector: 'app-clientes',
@@ -147,7 +147,7 @@ export class Clientes {
 
 @Component({
   selector: 'app-cliente',
-  imports: [FormsModule, RouterLink, MoneyPipe, WhenPipe],
+  imports: [FormsModule, RouterLink, MoneyInput, MoneyPipe, WhenPipe],
   template: `
     <main class="page">
       @if (data(); as d) {
@@ -193,12 +193,61 @@ export class Clientes {
               <div class="tile">
                 <div class="placa">{{ b.plate }}</div>
                 <div class="chico suave">{{ b.brand }} {{ b.model }} @if (b.color) { · {{ b.color }} } @if (b.year) { · {{ b.year }} }</div>
-                <a class="btn chico primario" style="margin-top: 10px" routerLink="/recepcion" [queryParams]="{ placa: b.plate }">Recibir esta moto</a>
+                @if (b.membership; as m) {
+                  <div class="aviso chico" style="margin-top: 8px">
+                    <span class="fuerte amarillo">Membresía {{ m.name }}</span>: quedan {{ m.remaining }} de {{ m.washes }} lavados de {{ m.service_name }}, hasta el {{ dayName(m.ends_on) }}.
+                  </div>
+                }
+                <div class="row" style="margin-top: 10px">
+                  <a class="btn chico primario" routerLink="/recepcion" [queryParams]="{ placa: b.plate }">Recibir esta moto</a>
+                  @if (!d.customer.pending && (!b.membership || b.membership.remaining === 0)) {
+                    <button class="btn chico" (click)="startSale(b)">Vender membresía</button>
+                  }
+                </div>
               </div>
             } @empty {
               <p class="suave chico">Aún no tiene motos registradas.</p>
             }
           </section>
+
+          @if (selling(); as b) {
+            <div class="modal-fondo" (click)="selling.set(null)">
+              <section class="modal card col" role="dialog" aria-modal="true" aria-labelledby="mb-titulo" (click)="$event.stopPropagation()" (keydown.escape)="selling.set(null)">
+                <h2 id="mb-titulo">Membresía para {{ b.plate }}</h2>
+                @if (plans().length) {
+                  <div class="col" style="gap: 8px">
+                    @for (p of plans(); track p.id) {
+                      <button class="opcion row between" [attr.aria-pressed]="planId() === p.id" (click)="planId.set(p.id)">
+                        <span><span class="fuerte">{{ p.name }}</span> · {{ p.washes }} × {{ p.service_name }}</span>
+                        <span class="num fuerte">{{ p.price | money }}</span>
+                      </button>
+                    }
+                  </div>
+                  <div>
+                    <p class="rotulo">Cómo paga</p>
+                    <div class="grid-sm">
+                      @for (m of saleMethods; track m) {
+                        <button class="opcion" style="text-align: center" [attr.aria-pressed]="method() === m" (click)="method.set(m)">{{ methods[m] }}</button>
+                      }
+                    </div>
+                  </div>
+                  @if (method() === 'EFECTIVO') {
+                    <div><label for="mb-cash">Con cuánto paga (vacío = exacto)</label><input id="mb-cash" class="campo" dinero [(ngModel)]="cash" /></div>
+                  } @else if (method()) {
+                    <div><label for="mb-ref">Referencia</label><input id="mb-ref" class="campo" [(ngModel)]="reference" /></div>
+                  }
+                  <p class="chico suave">Dura 30 días desde hoy. Entra a la caja del turno como un cobro.</p>
+                  <div class="row">
+                    <button class="btn primario grow" [disabled]="busy() || !planId() || !method()" (click)="sell(b)">Cobrar membresía</button>
+                    <button class="btn grow" (click)="selling.set(null)">Cancelar</button>
+                  </div>
+                } @else {
+                  <p class="suave">No hay planes de membresía. El propietario los crea en Ajustes.</p>
+                  <button class="btn" (click)="selling.set(null)">Cerrar</button>
+                }
+              </section>
+            </div>
+          }
 
           <section class="card main col">
             <h2>Historial de servicios</h2>
@@ -240,6 +289,40 @@ export class Cliente {
   protected names = STATUS_NAMES;
   protected data = signal<any | null>(null);
   protected editing = signal(false);
+
+  // ---- Venta de membresía ----
+  protected dayName = dayLabel;
+  protected methods = METHOD_NAMES;
+  protected saleMethods = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
+  protected plans = signal<any[]>([]);
+  protected selling = signal<any | null>(null);
+  protected planId = signal('');
+  protected method = signal('');
+  protected cash = signal<number | null>(null);
+  protected reference = signal('');
+  protected busy = signal(false);
+
+  startSale(b: any) {
+    this.planId.set('');
+    this.method.set('');
+    this.cash.set(null);
+    this.reference.set('');
+    this.selling.set(b);
+    this.api.get('/membership-plans').then((p) => this.plans.set(p), this.toast.fail);
+  }
+
+  async sell(b: any) {
+    this.busy.set(true);
+    try {
+      const out = await this.api.post('/memberships', { planId: this.planId(), bikeId: b.id, method: this.method(), cashReceived: this.cash(), reference: this.reference() });
+      this.toast.show(out.change > 0 ? `Membresía vendida. Devuelve ${new Intl.NumberFormat('es-CO').format(out.change)}.` : 'Membresía vendida.');
+      this.router.navigateByUrl('/comprobante/' + out.paymentId);
+    } catch (e) {
+      this.toast.fail(e);
+    } finally {
+      this.busy.set(false);
+    }
+  }
   protected name = signal('');
   protected phone = signal('');
   protected email = signal('');

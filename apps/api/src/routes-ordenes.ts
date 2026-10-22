@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { audit, Db, localDate, one, pool, q, TODAY, tx } from './db';
 import { auth, HttpError, int, MANAGERS, need, normPhone, normPlate, optText, STAFF, text, WASHES } from './auth';
+import { activeMembership } from './membership';
 
 export const ordenes = Router();
 
@@ -9,7 +10,7 @@ const ORDER_SELECT = `
     o.created_at, o.started_at, o.finished_at, o.ready_at, o.delivered_at, o.cancel_reason, o.notified_at,
     b.id as bike_id, b.plate, b.brand, b.model, b.color, b.no_plate,
     c.id as customer_id, c.name as customer_name, c.phone as customer_phone, c.pending as customer_pending,
-    s.name as service_name, s.min_minutes, s.max_minutes, s.steps,
+    o.service_id, s.name as service_name, s.min_minutes, s.max_minutes, s.steps,
     w.id as washer_id, w.name as washer_name,
     (select coalesce(json_agg(json_build_object('id', i.id, 'name', i.name, 'price', i.price, 'kind', i.kind) order by i.kind, i.name), '[]'::json)
        from order_items i where i.order_id = o.id) as items,
@@ -80,7 +81,7 @@ ordenes.get('/bikes/lookup', auth(...MANAGERS), async (req, res) => {
      from bikes b join customers c on c.id = b.customer_id where b.plate = $1`,
     [plate],
   );
-  res.json(bike ?? null);
+  res.json(bike ? { ...bike, membership: await activeMembership(bike.id) } : null);
 });
 
 ordenes.get('/customers', auth(...MANAGERS), async (req, res) => {
@@ -135,7 +136,8 @@ ordenes.post('/customers/:id/contacted', auth(...MANAGERS), async (req, res) => 
 ordenes.get('/customers/:id', auth(...MANAGERS), async (req, res) => {
   const customer = await one('select * from customers where id = $1', [req.params.id]);
   need(customer, 'Cliente no encontrado.', 404);
-  const bikes = await q('select * from bikes where customer_id = $1 order by created_at', [customer.id]);
+  const rows = await q('select * from bikes where customer_id = $1 order by created_at', [customer.id]);
+  const bikes = await Promise.all(rows.map(async (b) => ({ ...b, membership: await activeMembership(b.id) })));
   const orders = await q(`${ORDER_SELECT} where o.customer_id = $1 order by o.created_at desc limit 100`, [customer.id]);
   res.json({ customer, bikes, orders });
 });
@@ -186,7 +188,7 @@ ordenes.get('/orders/:id', auth(...STAFF), async (req, res) => {
   const o = await loadOrder(String(req.params.id));
   need(req.user.role !== 'WASHER' || o.washer_id === req.user.id, 'Esta moto no está asignada a ti.', 403);
   const photos = await q(`select id, 'data:' || mime || ';base64,' || encode(data, 'base64') as url from order_photos where order_id = $1 order by created_at`, [o.id]);
-  res.json({ ...o, photos });
+  res.json({ ...o, photos, membership: req.user.role === 'WASHER' ? null : await activeMembership(o.bike_id) });
 });
 
 const MAX_PHOTOS = 6;
@@ -355,12 +357,10 @@ ordenes.post('/orders/:id/cancel', auth(...MANAGERS), async (req, res) => {
 
 // ---- Cobros ----
 
-const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
+const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO', 'MEMBRESIA'];
 
 ordenes.post('/orders/:id/pay', auth(...MANAGERS), async (req, res) => {
   const b = req.body ?? {};
-  const method = String(b.method);
-  need(METHODS.includes(method), 'Elige cómo paga.');
   const tip = b.tip ? int(b.tip, 'La propina') : 0;
   const out = await tx(async (c) => {
     // Bloquea la orden para que dos toques seguidos no la cobren dos veces
@@ -374,10 +374,25 @@ ordenes.post('/orders/:id/pay', auth(...MANAGERS), async (req, res) => {
     need(shift, 'No hay turno abierto. Abre la caja antes de cobrar.');
     const deliver = o.status === 'READY' || o.status === 'REVIEW';
     // Descuento en pesos (la pantalla convierte el porcentaje); el cobro queda con el valor ya descontado
+    // Membresía: cubre el servicio base si es el de su plan; solo se cobran los adicionales
+    let covered = 0;
+    let membershipId: string | null = null;
+    if (b.useMembership === true) {
+      const m = await activeMembership(o.bike_id, c);
+      need(m && m.remaining > 0, 'Esta moto no tiene una membresía vigente con lavados disponibles.');
+      const base = o.items.find((i: any) => i.kind === 'BASE');
+      const service = await one('select service_id from order_items where id = $1', [base.id], c);
+      need(service.service_id === m.service_id, `La membresía cubre ${m.service_name}; cambia el servicio de la orden o cobra normal.`);
+      covered = base.price;
+      membershipId = m.id;
+    }
     const discount = b.discount ? int(b.discount, 'El descuento') : 0;
-    need(discount <= o.total, 'El descuento no puede ser mayor que el total.');
+    need(discount <= o.total - covered, 'El descuento no puede ser mayor que el total.');
     const discountReason = discount ? text(b.discountReason, 'el motivo del descuento', 200) : null;
-    const amount = o.total - discount;
+    const amount = o.total - covered - discount;
+    // Si la membresía cubre todo, no hay plata que recibir
+    const method = amount + tip === 0 && covered > 0 ? 'MEMBRESIA' : String(b.method);
+    need(method === 'MEMBRESIA' || (METHODS.includes(method) && method !== 'MEMBRESIA'), 'Elige cómo paga.');
     let cash: number | null = null;
     if (method === 'EFECTIVO') {
       const received = b.cashReceived === undefined || b.cashReceived === null ? amount + tip : int(b.cashReceived, 'El efectivo recibido');
@@ -385,16 +400,17 @@ ordenes.post('/orders/:id/pay', auth(...MANAGERS), async (req, res) => {
       cash = received;
     }
     const p = await one(
-      `insert into payments (order_id, shift_id, method, amount, tip, cash_received, reference, created_by, discount, discount_reason)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
-      [o.id, shift.id, method, amount, tip, cash, optText(b.reference, 40), req.user.id, discount, discountReason],
+      `insert into payments (order_id, shift_id, method, amount, tip, cash_received, reference, created_by, discount, discount_reason, covered, membership_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id`,
+      [o.id, shift.id, method, amount, tip, cash, optText(b.reference, 40), req.user.id, discount, discountReason, covered, membershipId],
       c,
     );
+    if (membershipId) await c.query('update orders set membership_id = $2 where id = $1', [o.id, membershipId]);
     // Si aún no está lista, la orden sigue su flujo y se entrega después con "Entregar"
     if (deliver) await c.query(`update orders set status = 'DELIVERED', delivered_at = now() where id = $1`, [o.id]);
     await audit(
       req.user.id, 'COBRO', 'payment', p.id,
-      { orden: o.code, medio: method, valor: amount, propina: tip, estado: o.status, ...(discount ? { descuento: discount, motivo: discountReason } : {}) },
+      { orden: o.code, medio: method, valor: amount, propina: tip, estado: o.status, ...(discount ? { descuento: discount, motivo: discountReason } : {}), ...(covered ? { membresia: covered } : {}) },
       c,
     );
     return { paymentId: p.id, change: cash === null ? 0 : cash - amount - tip, delivered: deliver };
@@ -407,11 +423,13 @@ ordenes.get('/payments', auth(...MANAGERS), async (req, res) => {
   // Con turno abierto se muestran sus cobros; sin turno, los de hoy
   const where = shift ? 'p.shift_id = $1' : `${localDate('p.created_at')} = ${TODAY} and $1::text is null`;
   const rows = await q(
-    `select p.id, p.method, p.amount, p.tip, p.discount, p.created_at, p.void_status, p.void_reason, p.edited_at,
-       'CS-' || lpad(o.number::text, 6, '0') as code, o.id as order_id, b.plate, s.name as service_name,
+    `select p.id, p.method, p.amount, p.tip, p.discount, p.covered, p.created_at, p.void_status, p.void_reason, p.edited_at,
+       coalesce('CS-' || lpad(o.number::text, 6, '0'), 'Membresía') as code, o.id as order_id, b.plate,
+       coalesce(s.name, 'Membresía ' || mb.name) as service_name, p.order_id is null as membership_sale,
        u.name as created_by_name, r.name as void_requested_by_name
      from payments p
-     join orders o on o.id = p.order_id join bikes b on b.id = o.bike_id join services s on s.id = o.service_id
+     left join orders o on o.id = p.order_id left join memberships mb on mb.id = p.membership_id and p.order_id is null
+     join bikes b on b.id = coalesce(o.bike_id, mb.bike_id) left join services s on s.id = o.service_id
      join users u on u.id = p.created_by left join users r on r.id = p.void_requested_by
      where ${where} or p.void_status = 'REQUESTED'
      order by p.created_at desc`,
@@ -423,14 +441,27 @@ ordenes.get('/payments', auth(...MANAGERS), async (req, res) => {
 // Comprobante de venta de un cobro (no es factura electrónica)
 ordenes.get('/payments/:id/receipt', auth(...MANAGERS), async (req, res) => {
   const p = await one(
-    `select p.id, p.order_id, p.method, p.amount, p.tip, p.discount, p.discount_reason, p.cash_received, p.reference, p.created_at, p.void_status,
+    `select p.id, p.order_id, p.method, p.amount, p.tip, p.discount, p.discount_reason, p.covered, p.cash_received, p.reference, p.created_at, p.void_status,
        p.edited_at, p.edit_reason, e.name as edited_by_name, u.name as created_by_name,
        (select s.closed_at is null from shifts s where s.id = p.shift_id) as shift_open
      from payments p join users u on u.id = p.created_by left join users e on e.id = p.edited_by where p.id = $1`,
     [String(req.params.id)],
   );
   need(p, 'Cobro no encontrado.', 404);
-  res.json({ payment: p, order: await loadOrder(p.order_id) });
+  if (p.order_id) return res.json({ payment: p, order: await loadOrder(p.order_id) });
+  const m = await one(
+    `select m.*, m.ends_on::text as until, s.name as service_name, b.plate, b.brand, b.model, c.name as customer_name, c.phone as customer_phone
+     from payments x join memberships m on m.id = x.membership_id join services s on s.id = m.service_id
+     join bikes b on b.id = m.bike_id join customers c on c.id = m.customer_id where x.id = $1`,
+    [p.id],
+  );
+  res.json({
+    payment: { ...p, shift_open: false },
+    order: {
+      code: 'Membresía', plate: m.plate, brand: m.brand, model: m.model, customer_name: m.customer_name, customer_phone: m.customer_phone,
+      total: m.price, items: [{ id: m.id, name: `Membresía ${m.name}: ${m.washes} × ${m.service_name}, hasta ${m.until}`, price: m.price, kind: 'BASE' }],
+    },
+  });
 });
 
 // Corregir un cobro (medio, descuento, propina, referencia, efectivo): no se borra, queda el antes y el después
@@ -445,16 +476,18 @@ ordenes.patch('/payments/:id', auth(...MANAGERS), async (req, res) => {
     const shift = await one('select closed_at from shifts where id = $1', [p.shift_id], c);
     // El administrador corrige mientras el turno está abierto; después, solo el propietario
     need(req.user.role === 'OWNER' || !shift.closed_at, 'El turno de este cobro ya se cerró: solo el propietario puede corregirlo.', 403);
+    need(p.order_id, 'Una venta de membresía no se corrige: anúlala desde Caja y véndela de nuevo.');
     const o = await loadOrder(p.order_id, c);
 
-    const method = b.method === undefined ? p.method : String(b.method);
-    need(METHODS.includes(method), 'Elige cómo pagó.');
     const discount = b.discount === undefined ? p.discount : b.discount ? int(b.discount, 'El descuento') : 0;
-    need(discount <= o.total, 'El descuento no puede ser mayor que el total.');
+    need(discount <= o.total - p.covered, 'El descuento no puede ser mayor que el total.');
     const discountReason = discount ? (b.discountReason === undefined ? p.discount_reason : optText(b.discountReason, 200)) : null;
     need(!discount || discountReason, 'Escribe el motivo del descuento.');
     const tip = b.tip === undefined ? p.tip : b.tip ? int(b.tip, 'La propina') : 0;
-    const amount = o.total - discount;
+    const amount = o.total - p.covered - discount;
+    const asked = b.method === undefined ? p.method : String(b.method);
+    const method = amount + tip === 0 && p.covered > 0 ? 'MEMBRESIA' : asked === 'MEMBRESIA' ? '' : asked;
+    need(METHODS.includes(method), 'Elige cómo pagó.');
     let cash: number | null = null;
     if (method === 'EFECTIVO') {
       const given = b.cashReceived === undefined ? p.cash_received : b.cashReceived;
@@ -479,8 +512,14 @@ ordenes.patch('/payments/:id', auth(...MANAGERS), async (req, res) => {
 });
 
 /** El cobro no se borra: queda anulado y la moto vuelve a "Lista para entregar". */
-async function reopenOrder(orderId: string, db: Db) {
-  await db.query(`update orders set status = 'READY', delivered_at = null where id = $1 and status = 'DELIVERED'`, [orderId]);
+async function reopenOrder(orderId: string | null, db: Db, membershipId: string | null = null) {
+  if (orderId) {
+    await db.query(`update orders set status = 'READY', delivered_at = null where id = $1 and status = 'DELIVERED'`, [orderId]);
+    // Si había usado la membresía, el lavado vuelve a quedar disponible (se cuenta por cobros vigentes)
+    await db.query('update orders set membership_id = null where id = $1', [orderId]);
+  } else if (membershipId) {
+    await db.query('update memberships set cancelled_at = now() where id = $1', [membershipId]);
+  }
 }
 
 // El administrador pide la anulación; el propietario la aplica de una vez
@@ -498,7 +537,7 @@ ordenes.post('/payments/:id/void', auth(...MANAGERS), async (req, res) => {
        where id = $1`,
       [p.id, owner ? 'APPROVED' : 'REQUESTED', reason, req.user.id, owner ? req.user.id : null],
     );
-    if (owner) await reopenOrder(p.order_id, c);
+    if (owner) await reopenOrder(p.order_id, c, p.membership_id);
     await audit(req.user.id, owner ? 'COBRO_ANULADO' : 'ANULACION_SOLICITADA', 'payment', p.id, { motivo: reason, valor: p.amount }, c);
   });
   res.json({ status: owner ? 'APPROVED' : 'REQUESTED' });
@@ -512,7 +551,7 @@ ordenes.post('/payments/:id/void-resolve', auth('OWNER'), async (req, res) => {
     await c.query('update payments set void_status = $2, void_resolved_by = $3, void_resolved_at = now() where id = $1', [
       p.id, approve ? 'APPROVED' : 'REJECTED', req.user.id,
     ]);
-    if (approve) await reopenOrder(p.order_id, c);
+    if (approve) await reopenOrder(p.order_id, c, p.membership_id);
     await audit(req.user.id, approve ? 'COBRO_ANULADO' : 'ANULACION_RECHAZADA', 'payment', p.id, { motivo: p.void_reason, valor: p.amount }, c);
   });
   res.json({ status: approve ? 'APPROVED' : 'REJECTED' });

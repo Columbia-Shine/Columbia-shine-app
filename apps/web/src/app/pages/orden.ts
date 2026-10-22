@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Api, METHOD_NAMES, minutesSince, money, MoneyInput, MoneyPipe, readyWhatsapp, STATUS_NAMES, Toast, WhenPipe } from '../core';
+import { Api, dayLabel, METHOD_NAMES, minutesSince, money, MoneyInput, MoneyPipe, readyWhatsapp, STATUS_NAMES, Toast, WhenPipe } from '../core';
 
 @Component({
   selector: 'app-orden',
@@ -238,11 +238,16 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
                 <div class="row between"><span [class.fuerte]="i.kind === 'BASE'" [class.suave]="i.kind !== 'BASE'">{{ i.name }}</span><span class="num">{{ i.price | money }}</span></div>
               }
             </div>
-            @if (discount() > 0) {
+            @if (discount() > 0 || covered() > 0) {
               <div class="row between sep"><span>Subtotal</span><span class="num">{{ o.total | money }}</span></div>
+            }
+            @if (covered() > 0) {
+              <div class="row between amarillo"><span>Cubierto por membresía</span><span class="num">−{{ covered() | money }}</span></div>
+            }
+            @if (discount() > 0) {
               <div class="row between amarillo"><span>Descuento</span><span class="num">−{{ discount() | money }}</span></div>
             }
-            <div class="row between sep"><span class="fuerte">Total</span><span class="total" style="font-size: 40px">{{ o.total - discount() | money }}</span></div>
+            <div class="row between sep"><span class="fuerte">Total</span><span class="total" style="font-size: 40px">{{ o.total - covered() - discount() | money }}</span></div>
             <a class="btn chico" [routerLink]="['/ordenes', o.id]">Agregar adicional o ver la orden</a>
           </section>
 
@@ -251,6 +256,19 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
               @if (!ready()) {
                 <div class="aviso chico">Esta moto está "{{ status[o.status] }}". Se registra el pago y la orden sigue su flujo; cuando quede lista, la entregas desde la orden.</div>
               }
+              @if (o.membership; as m) {
+                <div class="aviso col" style="gap: 8px">
+                  <div><span class="fuerte amarillo">Membresía {{ m.name }}:</span> quedan {{ m.remaining }} de {{ m.washes }} lavados de {{ m.service_name }}, hasta el {{ dayName(m.ends_on) }}.</div>
+                  @if (canUseMembership()) {
+                    <button class="pastilla" style="align-self: flex-start" [attr.aria-pressed]="useMembership()" (click)="useMembership.set(!useMembership())">
+                      {{ useMembership() ? 'Usando la membresía' : 'Usar membresía en este lavado' }}
+                    </button>
+                  } @else if (m.remaining > 0) {
+                    <div class="chico suave">La membresía cubre {{ m.service_name }} y esta orden es otro servicio: se cobra normal.</div>
+                  }
+                </div>
+              }
+              @if (due() > 0) {
               <div class="col">
                 <p class="rotulo">Cómo paga</p>
                 <div class="grid-sm">
@@ -259,6 +277,7 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
                   }
                 </div>
               </div>
+              }
 
               <div class="col" style="gap: 10px">
                 <div class="row between">
@@ -307,7 +326,9 @@ const METHODS = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
                 </div>
               }
 
-              <button class="btn primario grande" [disabled]="busy() || !method()" (click)="pay()">{{ ready() ? 'Confirmar pago y entregar' : 'Confirmar pago' }}</button>
+              <button class="btn primario grande" [disabled]="busy() || (due() > 0 && !method())" (click)="pay()">
+                {{ due() === 0 ? 'Confirmar con membresía' : ready() ? 'Confirmar pago y entregar' : 'Confirmar pago' }}{{ due() === 0 && ready() ? ' y entregar' : '' }}
+              </button>
               <p class="chico suave">Un cobro registrado no se borra. Si hay un error, se pide la anulación desde Caja.</p>
             </section>
           } @else {
@@ -347,15 +368,26 @@ export class Cobro {
   protected discountMode = signal<'valor' | 'porcentaje'>('valor');
   protected discountInput = signal<number | null>(null);
   protected discountReason = signal('');
+  /** Membresía de la moto: se puede usar si le quedan lavados y cubre el servicio de esta orden. */
+  protected useMembership = signal(false);
+  protected canUseMembership = computed(() => {
+    const o = this.order();
+    return !!o?.membership && o.membership.remaining > 0 && o.membership.service_id === o.service_id;
+  });
+  /** Lo que cubre la membresía: el precio del servicio base de la orden. */
+  protected covered = computed(() =>
+    this.useMembership() && this.canUseMembership() ? (this.order()?.items.find((i: any) => i.kind === 'BASE')?.price ?? 0) : 0,
+  );
+  protected dayName = dayLabel;
   /** Descuento en pesos, nunca mayor que el total. */
   protected discount = computed(() => {
-    const total = this.order()?.total ?? 0;
+    const total = (this.order()?.total ?? 0) - this.covered();
     const v = Number(this.discountInput()) || 0;
     const pesos = this.discountMode() === 'porcentaje' ? Math.round((total * Math.min(v, 100)) / 100) : v;
     return Math.min(Math.max(pesos, 0), total);
   });
   /** Total a recibir: servicio menos descuento, más propina. */
-  protected due = computed(() => (this.order()?.total ?? 0) - this.discount() + (Number(this.tip()) || 0));
+  protected due = computed(() => (this.order()?.total ?? 0) - this.covered() - this.discount() + (Number(this.tip()) || 0));
   protected bills = computed(() => {
     const due = this.due();
     const options = [due, ...[20000, 50000, 100000, 200000].filter((b) => b > due)];
@@ -364,7 +396,11 @@ export class Cobro {
   protected change = computed(() => Math.max(0, (Number(this.cash()) || 0) - this.due()));
 
   constructor() {
-    this.api.get('/orders/' + this.id).then((o) => this.order.set(o), this.toast.fail);
+    this.api.get('/orders/' + this.id).then((o) => {
+      this.order.set(o);
+      // Si tiene membresía que sirve para esta orden, se propone usarla
+      this.useMembership.set(this.canUseMembership());
+    }, this.toast.fail);
   }
 
   async pay() {
@@ -374,6 +410,7 @@ export class Cobro {
     this.busy.set(true);
     try {
       const out = await this.api.post(`/orders/${this.id}/pay`, {
+        useMembership: this.covered() > 0,
         discount: this.discount(),
         discountReason: this.discountReason(),
         method: this.method(),

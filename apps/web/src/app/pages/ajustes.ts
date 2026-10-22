@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, MoneyInput, MoneyPipe, ROLE_NAMES, Toast, WhenPipe } from '../core';
 
@@ -18,7 +18,7 @@ const PERMISSIONS: [string, string, string, string][] = [
 const ACTIONS: Record<string, string> = {
   ORDEN_CREADA: 'Creó una orden', ORDEN_ASIGNADA: 'Asignó lavador', ORDEN_ESTADO: 'Cambió el estado', ORDEN_CANCELADA: 'Canceló una orden',
   CLIENTE_COMPLETADO: 'Completó datos de cliente de afán', CLIENTE_UNIDO: 'Unió cliente de afán con uno existente',
-  COBRO_EDITADO: 'Corrigió un cobro', INSUMO_CREADO: 'Creó un insumo', INSUMO_EDITADO: 'Cambió un insumo', INSUMO_COMPRA: 'Registró una compra de insumos', INSUMO_CONTEO: 'Contó un insumo', GASTO_REGISTRADO: 'Registró un gasto por fuera de la caja', GASTO_BORRADO: 'Borró un gasto por fuera de la caja', CLIENTE_CONTACTADO: 'Le escribió a un cliente para que vuelva',
+  COBRO_EDITADO: 'Corrigió un cobro', PLAN_CREADO: 'Creó un plan de membresía', PLAN_EDITADO: 'Cambió un plan de membresía', MEMBRESIA_VENDIDA: 'Vendió una membresía', INSUMO_CREADO: 'Creó un insumo', INSUMO_EDITADO: 'Cambió un insumo', INSUMO_COMPRA: 'Registró una compra de insumos', INSUMO_CONTEO: 'Contó un insumo', GASTO_REGISTRADO: 'Registró un gasto por fuera de la caja', GASTO_BORRADO: 'Borró un gasto por fuera de la caja', CLIENTE_CONTACTADO: 'Le escribió a un cliente para que vuelva',
   NOMINA_PAGADA: 'Registró un pago de nómina', NOMINA_DESHECHA: 'Deshizo un pago de nómina', ACUERDO_CREADO: 'Creó un acuerdo de mínimo', ACUERDO_EDITADO: 'Cambió un acuerdo de mínimo',
   ADICIONAL_AGREGADO: 'Agregó un adicional', ADICIONAL_QUITADO: 'Quitó un adicional', COBRO: 'Registró un cobro',
   ANULACION_SOLICITADA: 'Pidió anular un cobro', COBRO_ANULADO: 'Anuló un cobro', ANULACION_RECHAZADA: 'Rechazó una anulación',
@@ -121,6 +121,61 @@ const ACTIONS: Record<string, string> = {
           </section>
 
           <section class="card col">
+            <h2>Membresías</h2>
+            <p class="chico suave">Se venden para una placa desde la ficha del cliente y duran 30 días; los lavados que no use se pierden. El lavador gana su comisión sobre el precio normal del servicio.</p>
+            <div class="tabla-caja">
+              <table style="min-width: 600px">
+                <thead><tr><th>Plan</th><th>Incluye</th><th class="der">Valor normal</th><th class="der">Precio</th><th></th></tr></thead>
+                <tbody>
+                  @for (p of plans(); track p.id) {
+                    <tr [style.opacity]="p.active ? 1 : 0.55">
+                      <td class="fuerte">{{ p.name }}</td>
+                      <td>{{ p.washes }} × {{ p.service_name }}</td>
+                      <td class="der suave">{{ p.washes * p.service_price | money }}</td>
+                      <td class="der">
+                        @if (planPriceOf() === p.id) {
+                          <input class="campo" style="width: 130px; min-height: 44px" dinero [attr.aria-label]="'Precio de ' + p.name" [(ngModel)]="planPrice" />
+                        } @else {
+                          <span class="fuerte">{{ p.price | money }}</span>
+                          <div class="chico amarillo">ahorra {{ saving(p) }}%</div>
+                        }
+                      </td>
+                      <td class="der">
+                        <span class="row" style="justify-content: flex-end; flex-wrap: nowrap">
+                          @if (planPriceOf() === p.id) {
+                            <button class="btn chico azul" (click)="savePlanPrice(p)">Guardar</button>
+                          } @else {
+                            <button class="btn chico" (click)="planPriceOf.set(p.id); planPrice.set(p.price)">Cambiar precio</button>
+                          }
+                          <button class="btn chico" (click)="togglePlan(p)">{{ p.active ? 'Ocultar' : 'Mostrar' }}</button>
+                        </span>
+                      </td>
+                    </tr>
+                  } @empty {
+                    <tr><td colspan="5" class="suave">Todavía no hay planes.</td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div class="sep col">
+              <p class="rotulo">Nuevo plan</p>
+              <div class="grid">
+                <div><label for="pl-n">Nombre</label><input id="pl-n" class="campo" placeholder="Ej.: Plus" [(ngModel)]="planName" /></div>
+                <div>
+                  <label for="pl-s">Servicio que incluye</label>
+                  <select id="pl-s" class="campo" [(ngModel)]="planService">
+                    <option value="">Elegir…</option>
+                    @for (s of baseServices(); track s.id) { <option [value]="s.id">{{ s.name }} · {{ s.price | money }}</option> }
+                  </select>
+                </div>
+                <div><label for="pl-w">Lavados en 30 días</label><input id="pl-w" class="campo" type="number" min="1" inputmode="numeric" [(ngModel)]="planWashes" /></div>
+                <div><label for="pl-p">Precio</label><input id="pl-p" class="campo" dinero [(ngModel)]="planNewPrice" /></div>
+              </div>
+              <button class="btn" style="align-self: flex-start" (click)="createPlan()">Crear plan</button>
+            </div>
+          </section>
+
+          <section class="card col">
             <h2>Qué puede hacer cada rol</h2>
             <div class="tabla-caja">
               <table style="min-width: 560px">
@@ -184,9 +239,42 @@ export class Ajustes {
     this.load();
   }
 
+  // ---- Membresías ----
+  protected plans = signal<any[]>([]);
+  protected planName = signal('');
+  protected planService = signal('');
+  protected planWashes = signal<number | null>(4);
+  protected planNewPrice = signal<number | null>(null);
+  protected planPriceOf = signal('');
+  protected planPrice = signal<number | null>(null);
+  protected baseServices = computed(() => this.services().filter((s) => s.kind === 'BASE' && s.active));
+  saving = (p: any) => Math.max(0, Math.round((1 - p.price / (p.washes * p.service_price)) * 100));
+
+  createPlan() {
+    this.run(async () => {
+      await this.api.post('/membership-plans', { name: this.planName(), serviceId: this.planService(), washes: Number(this.planWashes()), price: Number(this.planNewPrice()) });
+      this.planName.set('');
+      this.planNewPrice.set(null);
+    }, 'Plan creado.');
+  }
+
+  savePlanPrice(p: any) {
+    this.run(async () => {
+      await this.api.patch('/membership-plans/' + p.id, { price: Number(this.planPrice()) });
+      this.planPriceOf.set('');
+    }, 'Precio del plan actualizado.');
+  }
+
+  togglePlan(p: any) {
+    this.run(() => this.api.patch('/membership-plans/' + p.id, { active: !p.active }), p.active ? 'Plan oculto.' : 'Plan visible.');
+  }
+
   private async load() {
     try {
-      const [users, services, audit] = await Promise.all([this.api.get('/users'), this.api.get('/services'), this.api.get('/audit')]);
+      const [users, services, audit, plans] = await Promise.all([
+        this.api.get('/users'), this.api.get('/services'), this.api.get('/audit'), this.api.get('/membership-plans'),
+      ]);
+      this.plans.set(plans);
       this.users.set(users);
       this.services.set(services);
       this.audit.set(audit);

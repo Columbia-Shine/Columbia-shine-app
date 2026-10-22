@@ -34,6 +34,7 @@ export const METHOD_NAMES: Record<string, string> = {
   DAVIPLATA: 'Daviplata',
   TRANSFERENCIA: 'Transferencia',
   DATAFONO: 'Datáfono',
+  MEMBRESIA: 'Membresía',
 };
 
 @Injectable({ providedIn: 'root' })

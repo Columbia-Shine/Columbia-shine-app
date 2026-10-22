@@ -17,7 +17,7 @@ async function shiftSummary(shiftId: string, db: Db = pool) {
     db,
   );
   const byMethod = await q(
-    `select p.method, count(*) as n, sum(p.amount) as amount, sum(p.tip) as tips
+    `select p.method, count(*) filter (where p.order_id is not null) as n, sum(p.amount) as amount, sum(p.tip) as tips
      from payments p where p.shift_id = $1 and ${VALID_PAYMENT} group by p.method order by sum(p.amount) desc`,
     [shiftId],
     db,
@@ -37,9 +37,9 @@ async function shiftSummary(shiftId: string, db: Db = pool) {
   );
   const pct = await setting('commission_pct', 45);
   const washers = await q(
-    `select w.id, w.name, count(*) as n, sum(p.amount) as washed
+    `select w.id, w.name, count(*) as n, sum(p.amount + p.covered) as washed
      from payments p join orders o on o.id = p.order_id join users w on w.id = o.washer_id
-     where p.shift_id = $1 and ${VALID_PAYMENT} group by w.id, w.name order by sum(p.amount) desc`,
+     where p.shift_id = $1 and ${VALID_PAYMENT} group by w.id, w.name order by sum(p.amount + p.covered) desc`,
     [shiftId],
     db,
   );
@@ -118,7 +118,7 @@ operacion.post('/shifts/close', auth(...MANAGERS), async (req, res) => {
     const difference = counted - s.expectedCash;
     // Cada medio distinto del efectivo que tuvo cobros se confirma contra lo que entró a la cuenta
     const methodCounts = s.byMethod
-      .filter((m: any) => m.method !== 'EFECTIVO')
+      .filter((m: any) => m.method !== 'EFECTIVO' && m.method !== 'MEMBRESIA')
       .map((m: any) => {
         const expected = Number(m.amount) + Number(m.tips);
         const value = declared[m.method];
@@ -163,7 +163,7 @@ operacion.get('/shifts/:id', auth('OWNER'), async (req, res) => {
 
 operacion.get('/dashboard', auth(...MANAGERS), async (req, res) => {
   const today = await one(
-    `select coalesce(sum(p.amount), 0) as sales, count(*) as bikes
+    `select coalesce(sum(p.amount), 0) as sales, count(*) filter (where p.order_id is not null) as bikes
      from payments p where ${localDate('p.created_at')} = ${TODAY} and ${VALID_PAYMENT}`,
   );
   const active = await q(
@@ -335,9 +335,9 @@ operacion.get('/reports', auth(...MANAGERS), async (req, res) => {
   const P = [from, to];
   const inRange = `${localDate('p.created_at')} between $1::date and $2::date and ${VALID_PAYMENT}`;
 
-  const totals = await one(`select coalesce(sum(p.amount), 0) as sales, coalesce(sum(p.tip), 0) as tips, count(*) as bikes from payments p where ${inRange}`, P);
+  const totals = await one(`select coalesce(sum(p.amount), 0) as sales, coalesce(sum(p.tip), 0) as tips, count(*) filter (where p.order_id is not null) as bikes from payments p where ${inRange}`, P);
   const byDay = await q(
-    `select ${localDate('p.created_at')}::text as day, sum(p.amount) as sales, count(*) as bikes
+    `select ${localDate('p.created_at')}::text as day, sum(p.amount) as sales, count(*) filter (where p.order_id is not null) as bikes
      from payments p where ${inRange} group by 1 order by 1`,
     P,
   );
@@ -352,10 +352,10 @@ operacion.get('/reports', auth(...MANAGERS), async (req, res) => {
   );
   const pct = await setting('commission_pct', 45);
   const byWasher = await q(
-    `select w.name, count(*) as n, sum(p.amount) as washed,
+    `select w.name, count(*) as n, sum(p.amount + p.covered) as washed,
        round(avg(extract(epoch from o.finished_at - o.started_at) / 60) filter (where o.started_at is not null and o.finished_at is not null)) as avg_minutes
      from payments p join orders o on o.id = p.order_id join users w on w.id = o.washer_id
-     where ${inRange} group by w.name order by sum(p.amount) desc`,
+     where ${inRange} group by w.name order by sum(p.amount + p.covered) desc`,
     P,
   );
   const extra = await one(

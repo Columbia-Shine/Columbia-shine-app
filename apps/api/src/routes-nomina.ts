@@ -35,7 +35,7 @@ async function dayFigures(day: string, db: Db = pool) {
   const pct = await setting('commission_pct', 45);
   const staff = await q(`select id, name, role from users where active and ${WASHES()} order by name`, [], db);
   const washed = await q(
-    `select o.washer_id as id, count(*) as n, sum(p.amount) as washed
+    `select o.washer_id as id, count(*) as n, sum(p.amount + p.covered) as washed
      from payments p join orders o on o.id = p.order_id
      where ${localDate('p.created_at')} = $1::date and ${VALID_PAYMENT} and o.washer_id is not null
      group by o.washer_id`,
@@ -152,7 +152,7 @@ nomina.get('/my-month', auth('ADMIN', 'WASHER'), async (req, res) => {
   const { from, to } = await one(`select date_trunc('month', ${TODAY})::date::text as from, ${TODAY}::text as to`);
   // Lo que generó: lo cobrado en el mes de las motos que lavó
   const days = await q(
-    `select ${localDate('p.created_at')}::text as day, count(*) as washes, sum(p.amount) as washed
+    `select ${localDate('p.created_at')}::text as day, count(*) as washes, sum(p.amount + p.covered) as washed
      from payments p join orders o on o.id = p.order_id
      where o.washer_id = $1 and ${VALID_PAYMENT} and ${localDate('p.created_at')} between $2::date and $3::date
      group by 1 order by 1 desc`,

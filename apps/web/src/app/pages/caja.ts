@@ -257,7 +257,7 @@ export class Caja {
   /** Solo se piden los medios que tuvieron cobros en el turno; lo esperado incluye las propinas. */
   protected otherMethods = computed(() =>
     (this.summary()?.byMethod ?? [])
-      .filter((m: any) => m.method !== 'EFECTIVO')
+      .filter((m: any) => m.method !== 'EFECTIVO' && m.method !== 'MEMBRESIA')
       .map((m: any) => ({ method: m.method, expected: Number(m.amount) + Number(m.tips) })),
   );
   protected methodDiff = (m: { method: string; expected: number }) => (Number(this.methodCounts()[m.method]) || 0) - m.expected;

@@ -64,7 +64,7 @@ import { Api, METHOD_NAMES, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../
               @for (p of paid(); track p.id) {
                 <tr [style.opacity]="p.void_status === 'APPROVED' ? 0.55 : 1">
                   <td>{{ p.created_at | cuando }}</td>
-                  <td><a [routerLink]="['/ordenes', p.order_id]">{{ p.code }}</a></td>
+                  <td>@if (p.order_id) { <a [routerLink]="['/ordenes', p.order_id]">{{ p.code }}</a> } @else { {{ p.service_name }} }</td>
                   <td class="fuerte">{{ p.plate }}</td>
                   <td>{{ methods[p.method] }} @if (p.edited_at) { <span class="etiqueta">Editado</span> }</td>
                   <td>{{ p.created_by_name }}</td>

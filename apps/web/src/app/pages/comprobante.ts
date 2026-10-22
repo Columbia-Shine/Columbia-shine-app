@@ -92,8 +92,13 @@ import { receiptImage } from './comprobante-imagen';
             <div class="fila"><span>{{ i.name }}</span><span class="num">{{ i.price | money }}</span></div>
           }
           <div class="linea"></div>
+          @if (d.payment.discount || d.payment.covered) {
+            <div class="fila"><span>Subtotal</span><span class="num">{{ d.payment.amount + d.payment.discount + d.payment.covered | money }}</span></div>
+          }
+          @if (d.payment.covered) {
+            <div class="fila"><span>Cubierto por membresía</span><span class="num">−{{ d.payment.covered | money }}</span></div>
+          }
           @if (d.payment.discount) {
-            <div class="fila"><span>Subtotal</span><span class="num">{{ d.payment.amount + d.payment.discount | money }}</span></div>
             <div class="fila"><span>Descuento @if (d.payment.discount_reason) { ({{ d.payment.discount_reason }}) }</span><span class="num">−{{ d.payment.discount | money }}</span></div>
           }
           <div class="fila"><span>Total servicios</span><span class="num">{{ d.payment.amount | money }}</span></div>
@@ -164,7 +169,7 @@ export class Comprobante {
   /** Se corrige si no está anulado; el administrador solo mientras el turno siga abierto. */
   protected canEdit = computed(() => {
     const p = this.data()?.payment;
-    return !!p && !p.void_status?.match(/APPROVED|REQUESTED/) && (this.owner || p.shift_open);
+    return !!p && !!p.order_id && !p.void_status?.match(/APPROVED|REQUESTED/) && (this.owner || p.shift_open);
   });
   protected methodList = ['EFECTIVO', 'NEQUI', 'DAVIPLATA', 'TRANSFERENCIA', 'DATAFONO'];
   protected editing = signal(false);
@@ -177,7 +182,7 @@ export class Comprobante {
   protected eReference = signal('');
   protected eReason = signal('');
   protected eDiscountValue = computed(() => Number(this.eDiscount()) || 0);
-  protected eTotal = computed(() => (this.data()?.order.total ?? 0) - this.eDiscountValue() + (Number(this.eTip()) || 0));
+  protected eTotal = computed(() => (this.data()?.order.total ?? 0) - (this.data()?.payment.covered ?? 0) - this.eDiscountValue() + (Number(this.eTip()) || 0));
 
   startEdit() {
     const p = this.data().payment;

@@ -19,13 +19,14 @@ apps/api/            Node 22 + Express 5 + TypeScript (CommonJS), SQL directo co
   src/routes-nomina.ts     Nómina diaria y acuerdos de mínimo (solo OWNER)
   src/routes-finanzas.ts   Gastos por fuera de la caja y cierre del mes (solo OWNER)
   src/routes-inventario.ts Insumos: compras, conteos, alertas de stock bajo y consumo del mes
+  src/routes-membresias.ts Planes y venta de membresías; src/membership.ts activeMembership()
 apps/web/            Angular 21, componentes standalone, sin zone.js (todo el estado en signals)
   src/app/core.ts    Api (fetch), Session, Toast, guard only(), pipes money y cuando, utilidades de fecha
   src/app/app.ts     Barra superior y menú según rol
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 014_inventario.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 015_membresias.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -134,6 +135,14 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Compra (`supply_moves` COMPRA): suma stock, actualiza el costo por unidad y registra el gasto de Insumos: en la caja del turno si se pagó con efectivo de la caja, o en `expenses` si se pagó por fuera.
 - Conteo (`supply_moves` CONTEO): ajusta al stock real; la diferencia negativa es lo gastado. El consumo del mes sale de los conteos, valorizado, y da el costo real por moto.
 - Alerta en Inicio cuando un insumo está en su mínimo o por debajo (`lowStock` del dashboard).
+
+## Membresías
+
+- Planes en Ajustes (`membership_plans`): nombre, servicio incluido, lavados y precio.
+- Se venden **para una placa** desde la ficha del cliente (`POST /memberships`): copia del plan en `memberships`, dura **30 días** (`starts_on`…`ends_on`), lo no usado vence. La venta es un cobro **sin orden** (`payments.order_id` null, `membership_id`): entra a la caja y a las ventas, no cuenta como moto ni da comisión. No se vende otra mientras la vigente tenga lavados.
+- Al cobrar una orden de esa moto con el servicio del plan: "Usar membresía" → `payments.covered` = precio del servicio base, `amount` = solo adicionales (− descuento). Si no hay nada que pagar, el medio es `MEMBRESIA` (no se confirma en el cierre). `orders.membership_id` marca el uso.
+- Lavados usados = cobros vigentes con `covered > 0` de órdenes con esa membresía; anular el cobro devuelve el lavado. Anular la venta cancela la membresía (`cancelled_at`).
+- **Comisión sobre el precio normal**: todo cálculo de comisión usa `p.amount + p.covered`. "Motos" cuenta solo cobros con orden (`count(*) filter (where p.order_id is not null)`).
 
 ## Comprobante de venta
 

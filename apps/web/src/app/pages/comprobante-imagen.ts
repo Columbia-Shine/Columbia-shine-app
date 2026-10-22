@@ -152,8 +152,9 @@ export async function receiptImage(d: any, methods: Record<string, string>, logo
   for (const i of o.items) row(i.name, money(i.price));
   dashed();
 
+  if (p.discount || p.covered) row('Subtotal', money(p.amount + p.discount + (p.covered ?? 0)));
+  if (p.covered) row('Cubierto por membresía', '−' + money(p.covered));
   if (p.discount) {
-    row('Subtotal', money(p.amount + p.discount));
     row(p.discount_reason ? `Descuento (${p.discount_reason})` : 'Descuento', '−' + money(p.discount));
   }
   row('Total servicios', money(p.amount));
