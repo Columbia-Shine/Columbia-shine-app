@@ -2,7 +2,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Api, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } from '../core';
+import { Api, EXPENSE_CATEGORIES, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } from '../core';
 
 @Component({
   selector: 'app-caja',
@@ -79,13 +79,22 @@ import { Api, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } fr
                   <button class="pastilla" [attr.aria-pressed]="movKind() === k.id" (click)="movKind.set(k.id)">{{ k.label }}</button>
                 }
               </div>
+              @if (movKind() === 'GASTO') {
+                <select class="campo" aria-label="Categoría del gasto" [(ngModel)]="movCategory">
+                  <option value="">Categoría del gasto…</option>
+                  @for (c of categories; track c) { <option [value]="c">{{ c }}</option> }
+                </select>
+              }
+              @if (movKind() === 'RETIRO') {
+                <p class="chico suave">Para pagarle a un lavador usa Nómina: allí el retiro queda solo.</p>
+              }
               <div class="row">
                 <input class="campo" style="width: 140px" dinero placeholder="Valor" aria-label="Valor" [(ngModel)]="movAmount" />
                 <input class="campo grow" style="flex-basis: 160px" placeholder="¿En qué?" aria-label="Descripción" [(ngModel)]="movText" />
               </div>
               <button class="btn" [disabled]="busy()" (click)="addMovement()">Guardar movimiento</button>
               @for (m of s.movements; track m.id) {
-                <div class="row between chico"><span>{{ m.created_at | cuando }} · {{ m.description }} <span class="suave">({{ m.user_name }})</span></span><span>{{ m.kind === 'ENTRADA' ? '+' : '−' }} {{ m.amount | money }}</span></div>
+                <div class="row between chico"><span>{{ m.created_at | cuando }} · @if (m.category) { <span class="etiqueta">{{ m.category }}</span> } {{ m.description }} <span class="suave">({{ m.user_name }})</span></span><span>{{ m.kind === 'ENTRADA' ? '+' : '−' }} {{ m.amount | money }}</span></div>
               }
             </div>
           </section>
@@ -182,6 +191,9 @@ import { Api, METHOD_NAMES, MoneyInput, MoneyPipe, Session, Toast, WhenPipe } fr
                 </div>
               }
             </div>
+            @if (payoutFor(m.method); as out) {
+              <p class="chico suave">Además salieron {{ out.amount | money }} por {{ methods[m.method] }} para nómina ({{ out.names }}): no los restes, aquí va solo lo que entró de clientes.</p>
+            }
           }
           @if (anyDifference()) {
             <div>
@@ -233,6 +245,8 @@ export class Caja {
   protected movKind = signal('GASTO');
   protected movAmount = signal<number | null>(null);
   protected movText = signal('');
+  protected movCategory = signal('');
+  protected categories = EXPENSE_CATEGORIES;
   protected counted = signal<number | null>(null);
   protected note = signal('');
   protected voiding = signal('');
@@ -253,6 +267,8 @@ export class Caja {
       this.otherMethods().some((m: any) => this.methodCounts()[m.method] != null && this.methodDiff(m) !== 0),
   );
   protected readyToClose = computed(() => this.counted() !== null && this.otherMethods().every((m: any) => this.methodCounts()[m.method] != null));
+
+  payoutFor = (method: string) => (this.summary()?.payrollOut ?? []).find((p: any) => p.method === method && Number(p.amount) > 0);
 
   setMethodCount(method: string, value: number | null) {
     this.methodCounts.update((c) => ({ ...c, [method]: value }));
@@ -294,8 +310,9 @@ export class Caja {
 
   addMovement() {
     this.run(async () => {
-      await this.api.post('/shifts/movements', { kind: this.movKind(), amount: Number(this.movAmount()), description: this.movText() });
+      await this.api.post('/shifts/movements', { kind: this.movKind(), amount: Number(this.movAmount()), description: this.movText(), category: this.movCategory() });
       this.movAmount.set(null);
+      this.movCategory.set('');
       this.movText.set('');
     }, 'Movimiento guardado.');
   }

@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { audit, Db, localDate, one, pool, q, setting, TODAY, tx } from './db';
 import { auth, int, need, optText, WASHES } from './auth';
+import { openShift } from './routes-ordenes';
+
+const OUT_METHODS = ['NEQUI', 'DAVIPLATA', 'TRANSFERENCIA'];
 
 /** Nómina diaria del equipo (comisión, propinas y acuerdos de mínimo). Solo el propietario. */
 export const nomina = Router();
@@ -92,13 +95,35 @@ nomina.post('/payroll/pay', auth('OWNER'), async (req, res) => {
     const topup = topupFor(fig.guarantee, fig.washes, fig.commission, worked);
     const total = fig.commission + fig.tips + topup;
     need(total > 0, 'No hay nada por pagar ese día.');
+    // Cómo se le pagó: efectivo de la caja (queda como retiro) y/o por Nequi u otro medio
+    const cash = b.cash === undefined || b.cash === null ? 0 : int(b.cash, 'El efectivo');
+    const other = total - cash;
+    need(cash <= total, 'El efectivo no puede ser más que el total a pagar.');
+    const otherMethod = other > 0 ? String(b.otherMethod ?? '') : null;
+    need(!other || OUT_METHODS.includes(otherMethod!), 'Elige por qué medio pagaste el resto.');
+    let movementId: string | null = null;
+    if (cash > 0) {
+      const shift = await openShift(c);
+      need(shift, 'Para pagar con efectivo de la caja, abre el turno de caja.');
+      movementId = (
+        await one(
+          `insert into cash_movements (shift_id, kind, amount, description, category, created_by) values ($1, 'RETIRO', $2, $3, 'Nómina', $4) returning id`,
+          [shift.id, cash, `Nómina ${fig.name} ${day}`, req.user.id],
+          c,
+        )
+      ).id;
+    }
     const row = await one(
-      `insert into payroll_days (user_id, day, washes, washed, commission, tips, topup, total, guarantee_id, note, paid_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
-      [fig.id, day, fig.washes, fig.washed, fig.commission, fig.tips, topup, total, fig.guarantee?.id ?? null, optText(b.note, 300), req.user.id],
+      `insert into payroll_days (user_id, day, washes, washed, commission, tips, topup, total, guarantee_id, note, paid_by, paid_cash, paid_other, other_method, cash_movement_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) returning id`,
+      [fig.id, day, fig.washes, fig.washed, fig.commission, fig.tips, topup, total, fig.guarantee?.id ?? null, optText(b.note, 300), req.user.id, cash, other, otherMethod, movementId],
       c,
     );
-    await audit(req.user.id, 'NOMINA_PAGADA', 'user', fig.id, { persona: fig.name, dia: day, comision: fig.commission, propinas: fig.tips, ajuste: topup, total }, c);
+    await audit(
+      req.user.id, 'NOMINA_PAGADA', 'user', fig.id,
+      { persona: fig.name, dia: day, comision: fig.commission, propinas: fig.tips, ajuste: topup, total, efectivo: cash, otro_medio: other ? `${otherMethod} ${other}` : null },
+      c,
+    );
     return row.id;
   });
   res.status(201).json({ id: out });
@@ -108,9 +133,16 @@ nomina.post('/payroll/pay', auth('OWNER'), async (req, res) => {
 nomina.delete('/payroll/:id', auth('OWNER'), async (req, res) => {
   const d = await one(`select d.*, u.name from payroll_days d join users u on u.id = d.user_id where d.id = $1`, [req.params.id]);
   need(d, 'Pago no encontrado.', 404);
-  await q('delete from payroll_days where id = $1', [d.id]);
-  await audit(req.user.id, 'NOMINA_DESHECHA', 'user', d.user_id, { persona: d.name, dia: d.day, total: d.total });
-  res.json({ ok: true });
+  // El retiro de caja se deshace solo si su turno sigue abierto; si ya cerró, queda en ese cierre
+  const mov = d.cash_movement_id
+    ? await one('select m.id, s.closed_at from cash_movements m join shifts s on s.id = m.shift_id where m.id = $1', [d.cash_movement_id])
+    : null;
+  await tx(async (c) => {
+    await c.query('delete from payroll_days where id = $1', [d.id]);
+    if (mov && !mov.closed_at) await c.query('delete from cash_movements where id = $1', [mov.id]);
+    await audit(req.user.id, 'NOMINA_DESHECHA', 'user', d.user_id, { persona: d.name, dia: d.day, total: d.total, retiro_deshecho: !!(mov && !mov.closed_at) }, c);
+  });
+  res.json({ ok: true, cashKept: !!(mov && mov.closed_at) });
 });
 
 // ---- Mi mes: lo que lleva en el mes quien lava (el administrador también lava) ----

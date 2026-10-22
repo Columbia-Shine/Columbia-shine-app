@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Api, bogotaDay, dayLabel, MoneyInput, MoneyPipe, ROLE_NAMES, Toast, WhenPipe } from '../core';
+import { Api, bogotaDay, dayLabel, METHOD_NAMES, MoneyInput, MoneyPipe, ROLE_NAMES, Toast, WhenPipe } from '../core';
 
 /** Nómina diaria: lo que se le paga a cada persona por día, con los acuerdos de mínimo y su control. */
 @Component({
@@ -30,6 +30,13 @@ import { Api, bogotaDay, dayLabel, MoneyInput, MoneyPipe, ROLE_NAMES, Toast, Whe
               <div class="fila"><span class="suave">Propinas</span><span class="num">{{ d.tips | money }}</span></div>
               @if (d.topup) { <div class="fila amarillo"><span>Ajuste del acuerdo</span><span class="num">{{ d.topup | money }}</span></div> }
               <div class="fila sep"><span class="fuerte">Pagado</span><span class="total">{{ d.total | money }}</span></div>
+              @if (d.paid_cash || d.paid_other) {
+                <p class="chico suave">
+                  @if (d.paid_cash) { Efectivo de la caja {{ d.paid_cash | money }} (retiro) }
+                  @if (d.paid_cash && d.paid_other) { · }
+                  @if (d.paid_other) { {{ methods[d.other_method] || 'Por fuera de la caja' }} {{ d.paid_other | money }} }
+                </p>
+              }
               <p class="chico suave">Registrado por {{ d.paid_by_name }}, {{ d.paid_at | cuando: 'completa' }}@if (d.note) { · {{ d.note }} }</p>
               <button class="btn chico" style="align-self: flex-start" (click)="undo(p)">Deshacer</button>
             } @else {
@@ -49,6 +56,23 @@ import { Api, bogotaDay, dayLabel, MoneyInput, MoneyPipe, ROLE_NAMES, Toast, Whe
               }
               @if (topup(p)) { <div class="fila amarillo"><span>Ajuste del acuerdo</span><span class="num">{{ topup(p) | money }}</span></div> }
               <div class="fila sep"><span class="fuerte">Total a pagar</span><span class="total">{{ total(p) | money }}</span></div>
+              @if (total(p)) {
+                <div class="col" style="gap: 8px">
+                  <div>
+                    <label [for]="'ef-' + p.id">Efectivo de la caja (queda como retiro)</label>
+                    <input [id]="'ef-' + p.id" class="campo" dinero [ngModel]="cashOf(p)" (ngModelChange)="setCash(p.id, $event)" />
+                  </div>
+                  @if (otherOf(p) > 0) {
+                    <div>
+                      <label [for]="'om-' + p.id">El resto ({{ otherOf(p) | money }}) se lo pagaste por</label>
+                      <select [id]="'om-' + p.id" class="campo" [ngModel]="methodOf(p.id)" (ngModelChange)="setMethod(p.id, $event)">
+                        <option value="">Elegir…</option>
+                        @for (m of outMethods; track m) { <option [value]="m">{{ methods[m] }}</option> }
+                      </select>
+                    </div>
+                  }
+                </div>
+              }
               <button class="btn primario" [disabled]="busy() || !total(p)" (click)="pay(p)">Registrar pago {{ total(p) | money }}</button>
             }
           </article>
@@ -134,6 +158,20 @@ export class Nomina {
   private toast = inject(Toast);
 
   protected roles: Record<string, string> = ROLE_NAMES;
+  protected methods = METHOD_NAMES;
+  protected outMethods = ['NEQUI', 'DAVIPLATA', 'TRANSFERENCIA'];
+  /** Cuánto se paga en efectivo de la caja por persona (por defecto, todo) y por qué medio el resto */
+  private cash = signal<Record<string, number | null>>({});
+  private method = signal<Record<string, string>>({});
+  cashOf = (p: any): number => Math.min(this.cash()[p.id] ?? this.total(p), this.total(p));
+  otherOf = (p: any): number => this.total(p) - this.cashOf(p);
+  methodOf = (id: string): string => this.method()[id] ?? 'NEQUI';
+  setCash(id: string, v: number | null) {
+    this.cash.update((c) => ({ ...c, [id]: v ?? 0 }));
+  }
+  setMethod(id: string, m: string) {
+    this.method.update((c) => ({ ...c, [id]: m }));
+  }
   protected label = dayLabel;
   protected today = bogotaDay();
   protected day = signal(this.today);
@@ -202,11 +240,20 @@ export class Nomina {
   }
 
   pay(p: any) {
-    this.run(() => this.api.post('/payroll/pay', { userId: p.id, day: this.day(), worked: !!this.worked()[p.id] }), `Pago de ${p.name} registrado.`);
+    const cash = this.cashOf(p);
+    const other = this.otherOf(p);
+    if (other > 0 && !this.methodOf(p.id)) return this.toast.show('Elige por qué medio le pagaste el resto.', true);
+    this.run(
+      () => this.api.post('/payroll/pay', { userId: p.id, day: this.day(), worked: !!this.worked()[p.id], cash, otherMethod: other > 0 ? this.methodOf(p.id) : null }),
+      cash > 0 ? `Pago de ${p.name} registrado. El retiro de ${this.money(cash)} quedó en la caja.` : `Pago de ${p.name} registrado.`,
+    );
   }
 
   undo(p: any) {
-    this.run(() => this.api.del('/payroll/' + p.paid.id), 'Pago deshecho.');
+    this.run(async () => {
+      const out = await this.api.del('/payroll/' + p.paid.id);
+      if (out?.cashKept) this.toast.show('Pago deshecho. El retiro de caja queda en el turno que ya se cerró.', true);
+    }, 'Pago deshecho.');
   }
 
   endToday(g: any) {

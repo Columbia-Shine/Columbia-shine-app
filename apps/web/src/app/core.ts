@@ -25,6 +25,9 @@ export const STATUS_NAMES: Record<string, string> = {
   CANCELLED: 'Cancelada',
 };
 
+/** Categorías de gastos (igual que en la API). La nómina va aparte. */
+export const EXPENSE_CATEGORIES = ['Insumos', 'Arriendo', 'Servicios públicos', 'Comida', 'Mantenimiento', 'Transporte', 'Publicidad', 'Otro'];
+
 export const METHOD_NAMES: Record<string, string> = {
   EFECTIVO: 'Efectivo',
   NEQUI: 'Nequi',

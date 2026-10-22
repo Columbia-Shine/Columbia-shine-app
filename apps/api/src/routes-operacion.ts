@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { audit, Db, localDate, one, pool, q, setting, TODAY, tx } from './db';
-import { auth, int, MANAGERS, need, normPhone, optText, text, WASHES } from './auth';
+import { auth, EXPENSE_CATEGORIES, int, MANAGERS, need, normPhone, optText, text, WASHES } from './auth';
 import { openShift } from './routes-ordenes';
 
 export const operacion = Router();
@@ -23,7 +23,7 @@ async function shiftSummary(shiftId: string, db: Db = pool) {
     db,
   );
   const movements = await q(
-    `select m.id, m.kind, m.amount, m.description, m.created_at, u.name as user_name
+    `select m.id, m.kind, m.amount, m.description, m.category, m.created_at, u.name as user_name
      from cash_movements m join users u on u.id = m.created_by where m.shift_id = $1 order by m.created_at`,
     [shiftId],
     db,
@@ -57,8 +57,17 @@ async function shiftSummary(shiftId: string, db: Db = pool) {
     return { id: w.id, name: w.name, n: Number(w.n), washed: Number(w.washed), commission, tip: tipEach, total: commission + tipEach };
   });
   const pending = await one(`select count(*) as n from orders where status in ('WAITING', 'WASHING', 'REVIEW', 'READY')`, [], db);
+  // Nómina pagada por Nequi u otro medio durante el turno: sale de la cuenta, no de lo que entró de clientes
+  const payrollOut = await q(
+    `select d.other_method as method, sum(d.paid_other) as amount, string_agg(u.name, ', ') as names
+     from payroll_days d join users u on u.id = d.user_id
+     where d.paid_other > 0 and d.other_method is not null and d.paid_at >= $1 and d.paid_at <= coalesce($2, now())
+     group by d.other_method`,
+    [shift.opened_at, shift.closed_at],
+    db,
+  );
   return {
-    shift, byMethod, byService, movements, payroll,
+    shift, byMethod, byService, movements, payroll, payrollOut,
     commissionPct: pct,
     sales, tips,
     bikes: sum(byMethod, 'n'),
@@ -88,10 +97,13 @@ operacion.post('/shifts/movements', auth(...MANAGERS), async (req, res) => {
   need(['GASTO', 'RETIRO', 'ENTRADA'].includes(kind), 'Tipo de movimiento no válido.');
   const amount = int(req.body?.amount, 'El valor', 1);
   const description = text(req.body?.description, 'la descripción', 200);
-  const m = await one('insert into cash_movements (shift_id, kind, amount, description, created_by) values ($1, $2, $3, $4, $5) returning id', [
-    shift.id, kind, amount, description, req.user.id,
+  // Los gastos llevan categoría para saber en qué se va la plata
+  const category = kind === 'GASTO' ? String(req.body?.category ?? '') : null;
+  need(kind !== 'GASTO' || EXPENSE_CATEGORIES.includes(category!), 'Elige la categoría del gasto.');
+  const m = await one('insert into cash_movements (shift_id, kind, amount, description, category, created_by) values ($1, $2, $3, $4, $5, $6) returning id', [
+    shift.id, kind, amount, description, category, req.user.id,
   ]);
-  await audit(req.user.id, 'MOVIMIENTO_CAJA', 'cash_movement', m.id, { tipo: kind, valor: amount, descripcion: description });
+  await audit(req.user.id, 'MOVIMIENTO_CAJA', 'cash_movement', m.id, { tipo: kind, valor: amount, descripcion: description, categoria: category });
   res.status(201).json(await shiftSummary(shift.id));
 });
 

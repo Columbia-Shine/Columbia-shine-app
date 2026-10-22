@@ -51,6 +51,9 @@ export function auth(...roles: Role[]) {
 
 export const STAFF: Role[] = ['OWNER', 'ADMIN', 'WASHER'];
 
+/** Categorías de gastos (en caja y por fuera). La nómina va aparte. */
+export const EXPENSE_CATEGORIES = ['Insumos', 'Arriendo', 'Servicios públicos', 'Comida', 'Mantenimiento', 'Transporte', 'Publicidad', 'Otro'];
+
 /** Quién lava (se le asignan motos y tiene comisión): los lavadores y los administradores marcados. */
 export const WASHES = (alias = '') => `(${alias}role = 'WASHER' or ${alias}washes)`;
 export const MANAGERS: Role[] = ['OWNER', 'ADMIN'];

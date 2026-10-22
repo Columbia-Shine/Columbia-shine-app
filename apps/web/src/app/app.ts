@@ -65,7 +65,7 @@ export class App {
       { path: '/clientes', label: 'Clientes' },
       { path: '/reportes', label: role === 'OWNER' ? 'Reportes' : this.session.user()?.washes === false ? 'Reporte de hoy' : 'Mi mes y hoy' },
     ];
-    return role === 'OWNER' ? [...base, { path: '/nomina', label: 'Nómina' }, { path: '/ajustes', label: 'Ajustes' }] : base;
+    return role === 'OWNER' ? [...base, { path: '/mes', label: 'Mes' }, { path: '/nomina', label: 'Nómina' }, { path: '/ajustes', label: 'Ajustes' }] : base;
   });
 
   logout() {
