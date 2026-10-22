@@ -160,7 +160,7 @@ export class Orden {
   constructor() {
     this.load();
     Promise.all([this.api.get('/users'), this.api.get('/services')]).then(([u, s]) => {
-      this.washers.set(u.filter((x: any) => x.role !== 'OWNER'));
+      this.washers.set(u.filter((x: any) => x.washes));
       this.services.set(s);
     }, this.toast.fail);
   }

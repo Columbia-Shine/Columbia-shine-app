@@ -10,7 +10,7 @@ import { Api, bogotaDay, dayLabel, METHOD_NAMES, MoneyPipe, Session, Toast, When
       <div class="row between">
         <div>
           <p class="rotulo">{{ rangeLabel() }}</p>
-          <h1>{{ owner ? 'Reportes' : 'Mi mes y hoy' }}</h1>
+          <h1>{{ owner ? 'Reportes' : washes ? 'Mi mes y hoy' : 'Reporte de hoy' }}</h1>
         </div>
         <div class="row no-imprimir">
           @if (owner) {
@@ -31,7 +31,8 @@ import { Api, bogotaDay, dayLabel, METHOD_NAMES, MoneyPipe, Session, Toast, When
         </div>
       }
 
-      @if (!owner && mine(); as m) {
+      @if (!owner && mine()?.washes) {
+        @let m = mine();
         <section class="card col">
           <div class="row between">
             <h2>Mi mes · {{ monthName(m.from) }}</h2>
@@ -209,7 +210,9 @@ import { Api, bogotaDay, dayLabel, METHOD_NAMES, MoneyPipe, Session, Toast, When
 export class Reportes {
   private api = inject(Api);
   private toast = inject(Toast);
-  protected owner = inject(Session).is('OWNER');
+  private session = inject(Session);
+  protected owner = this.session.is('OWNER');
+  protected washes = this.session.user()?.washes !== false;
 
   protected methods = METHOD_NAMES;
   protected ranges = [
@@ -241,7 +244,8 @@ export class Reportes {
   constructor() {
     this.pick(this.range());
     if (this.owner) this.api.get('/shifts/history').then((s) => this.shifts.set(s), this.toast.fail);
-    else this.api.get('/my-month').then((m) => this.mine.set(m), this.toast.fail);
+    // Quien solo administra (no lava) no tiene "Mi mes"
+    else if (this.washes) this.api.get('/my-month').then((m) => this.mine.set(m), this.toast.fail);
   }
 
   pick(id: string) {

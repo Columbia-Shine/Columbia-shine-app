@@ -44,10 +44,13 @@ const ACTIONS: Record<string, string> = {
                     <div class="fuerte">{{ u.name }} @if (!u.active) { (inactivo) }</div>
                     <div class="chico suave">Usuario: {{ u.username || 'sin usuario' }}@if (u.email) { · {{ u.email }} }</div>
                   </div>
-                  <span class="etiqueta" [class.amarilla]="u.role === 'OWNER'" [class.azul]="u.role === 'ADMIN'">{{ roles[u.role] }}</span>
+                  <span class="etiqueta" [class.amarilla]="u.role === 'OWNER'" [class.azul]="u.role === 'ADMIN'">{{ u.role === 'ADMIN' && u.washes ? 'Administrador y lava' : roles[u.role] }}</span>
                 </div>
                 <div class="row">
                   <button class="btn chico" (click)="edit(u)">Cambiar usuario o contraseña</button>
+                  @if (u.role === 'ADMIN') {
+                    <button class="btn chico" (click)="patch(u, { washes: !u.washes }, u.washes ? 'Ya no se le asignan motos.' : 'Ahora también lava.')">{{ u.washes ? 'Ya no lava' : 'También lava' }}</button>
+                  }
                   @if (u.role !== 'OWNER') {
                     <button class="btn chico" (click)="patch(u, { role: u.role === 'ADMIN' ? 'WASHER' : 'ADMIN' }, 'Rol actualizado.')">Pasar a {{ u.role === 'ADMIN' ? 'lavador' : 'administrador' }}</button>
                     <button class="btn chico" (click)="patch(u, { active: !u.active }, u.active ? 'Usuario desactivado.' : 'Usuario activado.')">{{ u.active ? 'Desactivar' : 'Activar' }}</button>
@@ -71,6 +74,9 @@ const ACTIONS: Record<string, string> = {
               <button class="pastilla" [attr.aria-pressed]="role() === 'WASHER'" (click)="role.set('WASHER')">Lavador</button>
               <button class="pastilla" [attr.aria-pressed]="role() === 'ADMIN'" (click)="role.set('ADMIN')">Administrador de turno</button>
             </div>
+            @if (role() === 'ADMIN') {
+              <label class="check-lava"><input type="checkbox" [checked]="washes()" (change)="washes.set(!washes())" /> <span>También lava (se le asignan motos y gana comisión)</span></label>
+            }
             <div><label for="uu">Usuario para entrar</label><input id="uu" class="campo" autocapitalize="none" spellcheck="false" placeholder="ej. gregorio" [(ngModel)]="username" autocomplete="off" /></div>
             <div><label for="uc">Contraseña (mínimo 8 caracteres)</label><input id="uc" class="campo" type="password" [(ngModel)]="password" autocomplete="new-password" /></div>
             <div><label for="ue">Correo (opcional)</label><input id="ue" class="campo" type="email" [(ngModel)]="email" autocomplete="off" /></div>
@@ -147,6 +153,10 @@ const ACTIONS: Record<string, string> = {
       </div>
     </main>
   `,
+  styles: `
+    .check-lava { display: flex; align-items: center; gap: 12px; min-height: 44px; margin: 0; font-size: 15px; color: #fff; cursor: pointer; }
+    .check-lava input { width: 22px; height: 22px; accent-color: var(--amarillo); flex: 0 0 auto; }
+  `,
 })
 export class Ajustes {
   private api = inject(Api);
@@ -163,6 +173,7 @@ export class Ajustes {
   protected newPassword = signal('');
   protected name = signal('');
   protected role = signal<'WASHER' | 'ADMIN'>('WASHER');
+  protected washes = signal(false);
   protected username = signal('');
   protected email = signal('');
   protected password = signal('');
@@ -230,9 +241,10 @@ export class Ajustes {
 
   create() {
     this.run(async () => {
-      await this.api.post('/users', { name: this.name(), role: this.role(), username: this.username(), email: this.email(), password: this.password() });
+      await this.api.post('/users', { name: this.name(), role: this.role(), username: this.username(), email: this.email(), password: this.password(), washes: this.role() === 'ADMIN' && this.washes() });
       this.name.set('');
       this.username.set('');
+      this.washes.set(false);
       this.email.set('');
       this.password.set('');
     }, 'Usuario creado.');

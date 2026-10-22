@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { audit, Db, localDate, one, pool, q, setting, TODAY, tx } from './db';
-import { auth, int, MANAGERS, need, normPhone, optText, text } from './auth';
+import { auth, int, MANAGERS, need, normPhone, optText, text, WASHES } from './auth';
 import { openShift } from './routes-ordenes';
 
 export const operacion = Router();
@@ -176,7 +176,7 @@ operacion.get('/dashboard', auth(...MANAGERS), async (req, res) => {
     `select u.id, u.name,
        (select count(*) from orders o where o.washer_id = u.id and o.status = 'DELIVERED' and ${localDate('o.delivered_at')} = ${TODAY}) as done,
        (select count(*) from orders o where o.washer_id = u.id and o.status in ('WAITING', 'WASHING')) as in_progress
-     from users u where u.active and u.role in ('WASHER', 'ADMIN') order by u.name`,
+     from users u where u.active and ${WASHES('u.')} order by u.name`,
   );
   const voidRequests = req.user.role === 'OWNER' ? Number((await one(`select count(*) as n from payments where void_status = 'REQUESTED'`)).n) : 0;
   const bookings = await q(

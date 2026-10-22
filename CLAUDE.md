@@ -23,7 +23,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 008_cobro_editado.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 009_admin_que_lava.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -63,6 +63,7 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 | `WASHER` lavador | Usuario y contraseña en `/ingreso` | Solo sus motos: iniciar y terminar (queda lista para entregar). Nunca ve cifras del negocio |
 | `CLIENT` cliente | Usuario o correo y clave en `/cliente` | Agendar y cancelar sus reservas, registrar sus motos |
 
+- Hay un solo propietario y varios lavadores. **Quién lava** (se le asignan motos, tiene comisión, nómina y "Mi mes"): todos los WASHER y los ADMIN con `users.washes = true` (helper `WASHES()` de `auth.ts`). Gregorio es el único administrador que lava; el usuario "Columbia" (celular de la empresa) solo administra. Se cambia en Ajustes con "También lava" / "Ya no lava".
 - `/auth/login` recibe `{ login, password, staff }`: `login` es el usuario o el correo (sin importar mayúsculas). Con `staff: true` solo entra el equipo; sin él, solo clientes.
 - El usuario (`users.username`) es único en minúsculas: 3 a 30 caracteres `a-z 0-9 . _ -`. Lo valida `username()` de `auth.ts`.
 - Contraseña mínima: 8 caracteres para el equipo, 6 para clientes. El propietario crea al equipo y le cambia usuario o contraseña en Ajustes.

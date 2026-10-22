@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { audit, Db, localDate, one, pool, q, setting, TODAY, tx } from './db';
-import { auth, int, need, optText } from './auth';
+import { auth, int, need, optText, WASHES } from './auth';
 
 /** Nómina diaria del equipo (comisión, propinas y acuerdos de mínimo). Solo el propietario. */
 export const nomina = Router();
@@ -30,7 +30,7 @@ async function today(db: Db = pool): Promise<string> {
 /** Cifras de un día por persona: lo cobrado de las motos que lavó, su comisión, propinas y el acuerdo vigente. */
 async function dayFigures(day: string, db: Db = pool) {
   const pct = await setting('commission_pct', 45);
-  const staff = await q(`select id, name, role from users where active and role in ('ADMIN', 'WASHER') order by name`, [], db);
+  const staff = await q(`select id, name, role from users where active and ${WASHES()} order by name`, [], db);
   const washed = await q(
     `select o.washer_id as id, count(*) as n, sum(p.amount) as washed
      from payments p join orders o on o.id = p.order_id
@@ -144,8 +144,9 @@ nomina.get('/my-month', auth('ADMIN', 'WASHER'), async (req, res) => {
      where user_id = $1 and ${TODAY} between starts_on and ends_on order by created_at desc limit 1`,
     [req.user.id],
   );
+  const me = await one(`select ${WASHES()} as washes from users where id = $1`, [req.user.id]);
   res.json({
-    from, to, pct, guarantee: guarantee ?? null, days: rows,
+    from, to, pct, washes: me.washes, guarantee: guarantee ?? null, days: rows,
     totals: {
       washes: sum((r) => r.washes),
       washed: sum((r) => r.washed),
@@ -183,7 +184,7 @@ nomina.get('/guarantees', auth('OWNER'), async (_req, res) => {
 
 nomina.post('/guarantees', auth('OWNER'), async (req, res) => {
   const b = req.body ?? {};
-  const u = await one(`select id, name from users where id = $1 and role in ('ADMIN', 'WASHER')`, [String(b.userId)]);
+  const u = await one(`select id, name from users where id = $1 and ${WASHES()}`, [String(b.userId)]);
   need(u, 'Elige la persona.');
   need(DAY.test(String(b.startsOn)) && DAY.test(String(b.endsOn)), 'Elige las fechas del acuerdo.');
   need(b.endsOn >= b.startsOn, 'La fecha final debe ser después de la inicial.');

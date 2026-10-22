@@ -50,6 +50,9 @@ export function auth(...roles: Role[]) {
 }
 
 export const STAFF: Role[] = ['OWNER', 'ADMIN', 'WASHER'];
+
+/** Quién lava (se le asignan motos y tiene comisión): los lavadores y los administradores marcados. */
+export const WASHES = (alias = '') => `(${alias}role = 'WASHER' or ${alias}washes)`;
 export const MANAGERS: Role[] = ['OWNER', 'ADMIN'];
 
 export const int = (v: unknown, label: string, min = 0): number => {

@@ -154,7 +154,7 @@ export class Nomina {
   constructor() {
     this.load();
     this.loadGuarantees();
-    this.api.get('/users').then((u: any[]) => this.staff.set(u.filter((x) => x.role !== 'OWNER' && x.active)), this.toast.fail);
+    this.api.get('/users').then((u: any[]) => this.staff.set(u.filter((x) => x.washes && x.active)), this.toast.fail);
   }
 
   protected money = (n: number) => '$' + new Intl.NumberFormat('es-CO').format(n);

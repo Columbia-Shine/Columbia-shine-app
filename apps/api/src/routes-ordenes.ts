@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { audit, Db, localDate, one, pool, q, TODAY, tx } from './db';
-import { auth, HttpError, int, MANAGERS, need, normPhone, normPlate, optText, STAFF, text } from './auth';
+import { auth, HttpError, int, MANAGERS, need, normPhone, normPlate, optText, STAFF, text, WASHES } from './auth';
 
 export const ordenes = Router();
 
@@ -203,7 +203,7 @@ ordenes.post('/orders', auth(...MANAGERS), async (req, res) => {
 
     let washerId: string | null = null;
     if (b.washerId) {
-      const w = await one(`select id from users where id = $1 and active and role in ('ADMIN', 'WASHER')`, [String(b.washerId)], c);
+      const w = await one(`select id from users where id = $1 and active and ${WASHES()}`, [String(b.washerId)], c);
       need(w, 'Ese lavador no está disponible.');
       washerId = w.id;
     }
@@ -234,7 +234,7 @@ ordenes.post('/orders', auth(...MANAGERS), async (req, res) => {
 ordenes.post('/orders/:id/assign', auth(...MANAGERS), async (req, res) => {
   const o = await loadOrder(String(req.params.id));
   need(['WAITING', 'WASHING', 'REVIEW'].includes(o.status), 'Esta orden ya no se puede reasignar.');
-  const w = await one(`select id, name from users where id = $1 and active and role in ('ADMIN', 'WASHER')`, [String(req.body?.washerId)]);
+  const w = await one(`select id, name from users where id = $1 and active and ${WASHES()}`, [String(req.body?.washerId)]);
   need(w, 'Ese lavador no está disponible.');
   await q('update orders set washer_id = $2 where id = $1', [o.id, w.id]);
   await audit(req.user.id, 'ORDEN_ASIGNADA', 'order', o.id, { orden: o.code, lavador: w.name });

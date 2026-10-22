@@ -3,7 +3,7 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { CanActivateFn, Router } from '@angular/router';
 
 export type Role = 'OWNER' | 'ADMIN' | 'WASHER' | 'CLIENT';
-export type User = { id: string; name: string; role: Role; customerId: string | null };
+export type User = { id: string; name: string; role: Role; customerId: string | null; washes?: boolean };
 
 const KEY = 'cs-sesion';
 

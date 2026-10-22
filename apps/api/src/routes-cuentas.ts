@@ -28,7 +28,7 @@ async function checkSecret(user: any, plain: string, hash: string | null) {
 }
 
 const session = (u: any) => {
-  const user = { id: u.id, name: u.name, role: u.role, customerId: u.customer_id };
+  const user = { id: u.id, name: u.name, role: u.role, customerId: u.customer_id, washes: u.role === 'WASHER' || !!u.washes };
   return { token: sign(user), user };
 };
 
@@ -92,11 +92,11 @@ cuentas.get('/me', auth(), async (req, res) => {
 
 cuentas.get('/users', auth('OWNER', 'ADMIN'), async (req, res) => {
   const rows = await q(
-    `select id, name, role, username, email, active
+    `select id, name, role, username, email, active, role = 'WASHER' or washes as washes
      from users where role <> 'CLIENT' order by case role when 'OWNER' then 0 when 'ADMIN' then 1 else 2 end, name`,
   );
   // El administrador solo necesita nombres y roles para asignar motos
-  res.json(req.user.role === 'OWNER' ? rows : rows.filter((r) => r.active).map(({ id, name, role }) => ({ id, name, role })));
+  res.json(req.user.role === 'OWNER' ? rows : rows.filter((r) => r.active).map(({ id, name, role, washes }) => ({ id, name, role, washes })));
 });
 
 const staffPassword = (v: unknown) => {
@@ -114,11 +114,13 @@ cuentas.post('/users', auth('OWNER'), async (req, res) => {
   const email = optEmail(req.body?.email);
   await usernameFree(login);
   await emailFree(email);
+  // Un administrador puede además lavar (como Gregorio); los lavadores siempre lavan
+  const washes = role === 'WASHER' || req.body?.washes === true;
   const u = await one(
-    `insert into users (name, role, username, email, password_hash) values ($1, $2, $3, $4, $5) returning id, name, role`,
-    [name, role, login, email, await bcrypt.hash(password, 10)],
+    `insert into users (name, role, username, email, password_hash, washes) values ($1, $2, $3, $4, $5, $6) returning id, name, role`,
+    [name, role, login, email, await bcrypt.hash(password, 10), washes],
   );
-  await audit(req.user.id, 'USUARIO_CREADO', 'user', u.id, { name, role, usuario: login });
+  await audit(req.user.id, 'USUARIO_CREADO', 'user', u.id, { name, role, usuario: login, lava: washes });
   res.status(201).json(u);
 });
 
@@ -131,6 +133,7 @@ cuentas.patch('/users/:id', auth('OWNER'), async (req, res) => {
   if (b.role !== undefined && u.role !== 'OWNER') {
     need(['ADMIN', 'WASHER'].includes(b.role), 'Rol no válido.');
     changes.role = b.role;
+    if (b.role === 'WASHER') changes.washes = true;
   }
   if (b.active !== undefined) {
     need(u.id !== req.user.id || b.active, 'No puedes desactivar tu propio usuario.');
@@ -140,6 +143,8 @@ cuentas.patch('/users/:id', auth('OWNER'), async (req, res) => {
     changes.username = username(b.username);
     await usernameFree(changes.username as string, u.id);
   }
+  // "También lava" solo aplica a administradores
+  if (b.washes !== undefined && (changes.role ?? u.role) === 'ADMIN') changes.washes = !!b.washes;
   if (b.password) changes.password_hash = await bcrypt.hash(staffPassword(b.password), 10);
   if (b.email !== undefined) {
     changes.email = optEmail(b.email);
