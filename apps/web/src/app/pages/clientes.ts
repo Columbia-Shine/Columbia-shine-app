@@ -11,6 +11,52 @@ import { Api, minutesSince, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../
     <main class="page">
       <div class="row between">
         <h1>Clientes</h1>
+        <div class="row">
+          <button class="pastilla" [attr.aria-pressed]="tab() === 'todos'" (click)="tab.set('todos')">Todos</button>
+          <button class="pastilla" [attr.aria-pressed]="tab() === 'recuperar'" (click)="openRecover()">Para recuperar</button>
+        </div>
+      </div>
+
+      @if (tab() === 'recuperar') {
+        <section class="card col">
+          <div class="row between">
+            <p class="suave">Clientes que no vuelven hace más de</p>
+            <div class="row">
+              @for (d of [30, 45, 60, 90]; track d) {
+                <button class="pastilla" [attr.aria-pressed]="days() === d" (click)="setDays(d)">{{ d }} días</button>
+              }
+            </div>
+          </div>
+          <div>
+            <label for="msg">Mensaje (usa {{ '{' }}nombre{{ '}' }} y {{ '{' }}placa{{ '}' }})</label>
+            <textarea id="msg" class="campo" rows="3" [(ngModel)]="message"></textarea>
+          </div>
+          <p class="chico suave">No aparecen quienes ya tienen una reserva o una moto en el local.</p>
+        </section>
+        <section class="card tabla-caja">
+          <table style="min-width: 640px">
+            <thead><tr><th>Cliente</th><th>Motos</th><th>Último servicio</th><th class="der">Visitas</th><th class="der">Sin venir</th><th></th></tr></thead>
+            <tbody>
+              @for (c of inactive(); track c.id) {
+                <tr>
+                  <td><a class="fuerte" [routerLink]="['/clientes', c.id]">{{ c.name }}</a><div class="chico suave">{{ c.phone }}</div></td>
+                  <td>{{ c.plates || '—' }}</td>
+                  <td>{{ c.last_service }}<div class="chico suave">{{ c.last_visit | cuando: 'fecha' }}</div></td>
+                  <td class="der">{{ c.visits }}</td>
+                  <td class="der fuerte">{{ c.days_since }} días</td>
+                  <td class="der">
+                    <a class="btn chico primario" [href]="invite(c)" target="_blank" rel="noopener" (click)="contacted(c)">Escribir por WhatsApp</a>
+                    @if (c.last_contacted_at) { <div class="chico suave">Le escribiste {{ c.last_contacted_at | cuando: 'fecha' }}</div> }
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="suave">Nadie lleva más de {{ days() }} días sin venir. Bien hecho.</td></tr>
+              }
+            </tbody>
+          </table>
+        </section>
+      } @else {
+      <div class="row">
         <input class="campo" style="max-width: 340px" type="search" placeholder="Buscar por nombre, celular o placa" aria-label="Buscar cliente"
           [ngModel]="term()" (ngModelChange)="search($event)" />
       </div>
@@ -36,6 +82,7 @@ import { Api, minutesSince, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../
           </tbody>
         </table>
       </section>
+      }
     </main>
   `,
 })
@@ -45,6 +92,40 @@ export class Clientes {
   protected term = signal('');
   protected customers = signal<any[]>([]);
   private timer: ReturnType<typeof setTimeout> | undefined;
+
+  // ---- Para recuperar ----
+  protected tab = signal<'todos' | 'recuperar'>('todos');
+  protected days = signal(30);
+  protected inactive = signal<any[]>([]);
+  protected message = signal('Hola {nombre}, te extrañamos en Columbia Shine. Tu moto {placa} merece brillar de nuevo: esta semana tienes 10% de descuento en cualquier lavado. ¿Te agendamos? Pasión por tu máquina.');
+
+  openRecover() {
+    this.tab.set('recuperar');
+    this.loadInactive();
+  }
+
+  setDays(d: number) {
+    this.days.set(d);
+    this.loadInactive();
+  }
+
+  private loadInactive() {
+    this.api.get('/customers/inactive?days=' + this.days()).then((c) => this.inactive.set(c), this.toast.fail);
+  }
+
+  invite(c: any): string {
+    const text = this.message()
+      .replaceAll('{nombre}', String(c.name).split(' ')[0])
+      .replaceAll('{placa}', String(c.plates ?? '').split(',')[0].trim());
+    return `https://wa.me/57${c.phone}?text=${encodeURIComponent(text)}`;
+  }
+
+  contacted(c: any) {
+    this.api.post(`/customers/${c.id}/contacted`, {}).then(
+      () => this.inactive.update((list) => list.map((x) => (x.id === c.id ? { ...x, last_contacted_at: new Date().toISOString() } : x))),
+      this.toast.fail,
+    );
+  }
 
   constructor() {
     this.load();

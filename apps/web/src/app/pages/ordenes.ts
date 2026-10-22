@@ -1,6 +1,6 @@
 import { Component, computed, inject, OnDestroy, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { Api, minutesSince, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../core';
+import { Api, minutesSince, MoneyPipe, readyWhatsapp, STATUS_NAMES, Toast, WhenPipe } from '../core';
 
 const COLUMNS = ['WAITING', 'WASHING', 'READY'];
 
@@ -14,6 +14,7 @@ const COLUMNS = ['WAITING', 'WASHING', 'READY'];
         <div class="row">
           <button class="pastilla" [attr.aria-pressed]="scope() === 'active'" (click)="setScope('active')">Activas</button>
           <button class="pastilla" [attr.aria-pressed]="scope() === 'today'" (click)="setScope('today')">Cerradas hoy</button>
+          <a class="btn chico" routerLink="/pantalla">Pantalla del local</a>
           <a class="btn primario chico" routerLink="/recepcion">+ Recibir moto</a>
         </div>
       </div>
@@ -37,6 +38,9 @@ const COLUMNS = ['WAITING', 'WASHING', 'READY'];
                     <div class="chico">{{ o.brand }} {{ o.model }} · {{ o.customer_name }}</div>
                     <div class="servicio">{{ o.service_name }} @if (o.payment_id) { <span class="etiqueta aqua">Pagada</span> }</div>
                     @if (extras(o); as x) { <div class="chico suave">+ {{ x }}</div> }
+                    @if (o.status === 'READY' && whatsapp(o); as link) {
+                      <a class="chico" [href]="link" target="_blank" rel="noopener" (click)="notified(o)">{{ o.notified_at ? 'Avisado · avisar de nuevo' : 'Avisar por WhatsApp' }}</a>
+                    }
                     <div class="row between" style="margin-top: 4px">
                       <span class="chico suave">{{ o.washer_name || 'Sin asignar' }}</span>
                       @switch (action(o)) {
@@ -136,6 +140,12 @@ export class Ordenes implements OnDestroy {
     if (o.status === 'WAITING') return o.washer_id ? 'start' : 'assign';
     if (o.status === 'READY') return o.payment_id ? 'deliver' : 'pay';
     return 'view';
+  }
+
+  protected whatsapp = readyWhatsapp;
+
+  notified(o: any) {
+    this.api.post(`/orders/${o.id}/notified`, {}).then(() => this.load(), this.toast.fail);
   }
 
   async move(o: any, status: string) {

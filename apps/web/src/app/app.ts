@@ -1,5 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter, map } from 'rxjs';
 import { ROLE_NAMES, Session, Toast } from './core';
 
 @Component({
@@ -7,6 +9,7 @@ import { ROLE_NAMES, Session, Toast } from './core';
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
   template: `
     @if (session.user(); as u) {
+      @if (!kiosk()) {
       <header class="barra-superior">
         <a routerLink="/" aria-label="Inicio"><img src="logo.png" alt="Columbia Shine" width="52" height="50" /></a>
         <nav aria-label="Principal">
@@ -19,6 +22,7 @@ import { ROLE_NAMES, Session, Toast } from './core';
           <button class="btn chico" (click)="logout()">Salir</button>
         </div>
       </header>
+      }
     }
     <router-outlet />
     @if (toast.message(); as m) {
@@ -41,6 +45,11 @@ export class App {
   protected session = inject(Session);
   protected toast = inject(Toast);
   private router = inject(Router);
+  /** En la pantalla del local no se muestra el menú */
+  protected kiosk = toSignal(
+    this.router.events.pipe(filter((e) => e instanceof NavigationEnd), map((e) => (e as NavigationEnd).urlAfterRedirects.startsWith('/pantalla'))),
+    { initialValue: false },
+  );
   protected roles = ROLE_NAMES;
 
   protected links = computed(() => {

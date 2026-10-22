@@ -23,7 +23,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 009_admin_que_lava.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 011_recuperar_clientes.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -95,6 +95,12 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Un cliente puede tener varias motos (`bikes.customer_id`). El cliente las agrega al agendar; en el local, con una placa nueva se elige "Ya es cliente: otra moto", se busca por nombre, celular o placa y se envía `customerId` en `POST /orders`.
 - Los clientes de afán no aparecen en esa búsqueda.
 - Si el cliente trae varias motos a la vez: "Crear y recibir otra moto de este cliente" crea la orden y deja la recepción lista para la siguiente placa con el cliente ya elegido (modo "Ya es cliente"), conservando el servicio.
+
+## Avisos y pantalla
+
+- **Moto lista**: en la orden (y en el tablero) un botón abre WhatsApp con el mensaje "tu moto está lista" (`readyWhatsapp()` de `core.ts`); se marca `orders.notified_at`. No usa ningún servicio pagado: es un enlace `wa.me`.
+- **Pantalla del local** (`/pantalla`): motos en espera, en lavado y listas, en letra grande, sin menú, se actualiza cada 15 s. Se abre desde Órdenes.
+- **Clientes para recuperar** (Clientes → "Para recuperar"): quienes no vuelven hace 30/45/60/90 días, con celular, sin reserva ni moto en el local. Mensaje editable con {nombre} y {placa}; al escribirles queda `customers.last_contacted_at`.
 
 ## Facturar
 

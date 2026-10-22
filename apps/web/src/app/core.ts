@@ -206,6 +206,15 @@ export class WhenPipe implements PipeTransform {
 }
 
 /** Minutos transcurridos desde una fecha. */
+/** Enlace de WhatsApp para avisarle al cliente que su moto está lista (null si no hay celular). */
+export const readyWhatsapp = (o: any): string | null => {
+  if (!o?.customer_phone) return null;
+  const name = o.customer_pending ? '' : ' ' + String(o.customer_name).split(' ')[0];
+  const pay = o.payment_id ? 'Ya está pagada.' : `Total a pagar: ${money(o.total)}.`;
+  const text = `Hola${name}, tu moto de placa ${o.plate} ya está lista para recoger en Columbia Shine. ${pay} ¡Te esperamos! Pasión por tu máquina.`;
+  return `https://wa.me/57${o.customer_phone}?text=${encodeURIComponent(text)}`;
+};
+
 export const minutesSince = (iso: string | null | undefined): number => (iso ? Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000)) : 0);
 
 /** 'YYYY-MM-DD' de hoy (más un desfase en días) en hora de Colombia. */

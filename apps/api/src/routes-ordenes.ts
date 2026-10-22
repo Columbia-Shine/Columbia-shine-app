@@ -6,7 +6,7 @@ export const ordenes = Router();
 
 const ORDER_SELECT = `
   select o.id, 'CS-' || lpad(o.number::text, 6, '0') as code, o.status, o.total, o.notes,
-    o.created_at, o.started_at, o.finished_at, o.ready_at, o.delivered_at, o.cancel_reason,
+    o.created_at, o.started_at, o.finished_at, o.ready_at, o.delivered_at, o.cancel_reason, o.notified_at,
     b.id as bike_id, b.plate, b.brand, b.model, b.color,
     c.id as customer_id, c.name as customer_name, c.phone as customer_phone, c.pending as customer_pending,
     s.name as service_name, s.min_minutes, s.max_minutes, s.steps,
@@ -99,6 +99,37 @@ ordenes.get('/customers', auth(...MANAGERS), async (req, res) => {
       [term],
     ),
   );
+});
+
+// Clientes que no han vuelto en N días (con celular, para invitarlos por WhatsApp)
+ordenes.get('/customers/inactive', auth(...MANAGERS), async (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 365);
+  res.json(
+    await q(
+      `select c.id, c.name, c.phone, c.last_contacted_at,
+         (select string_agg(b.plate, ', ') from bikes b where b.customer_id = c.id) as plates,
+         count(o.id) as visits, max(o.delivered_at) as last_visit,
+         (${TODAY} - ${localDate('max(o.delivered_at)')}) as days_since,
+         (select s.name from orders o2 join services s on s.id = o2.service_id
+            where o2.customer_id = c.id and o2.status = 'DELIVERED' order by o2.delivered_at desc limit 1) as last_service
+       from customers c join orders o on o.customer_id = c.id and o.status = 'DELIVERED'
+       where c.phone is not null and not c.pending
+         -- sin una reserva o una moto en el local
+         and not exists (select 1 from bookings k where k.customer_id = c.id and k.status = 'BOOKED' and k.starts_at > now())
+         and not exists (select 1 from orders a where a.customer_id = c.id and a.status in ${ACTIVE})
+       group by c.id
+       having max(o.delivered_at) < now() - make_interval(days => $1)
+       order by max(o.delivered_at) desc limit 200`,
+      [days],
+    ),
+  );
+});
+
+ordenes.post('/customers/:id/contacted', auth(...MANAGERS), async (req, res) => {
+  const c = await one('update customers set last_contacted_at = now() where id = $1 returning id, name', [req.params.id]);
+  need(c, 'Cliente no encontrado.', 404);
+  await audit(req.user.id, 'CLIENTE_CONTACTADO', 'customer', c.id, { cliente: c.name });
+  res.json({ ok: true });
 });
 
 ordenes.get('/customers/:id', auth(...MANAGERS), async (req, res) => {
@@ -268,6 +299,13 @@ ordenes.post('/orders/:id/status', auth(...STAFF), async (req, res) => {
     [o.id, to],
   );
   await audit(req.user.id, 'ORDEN_ESTADO', 'order', o.id, { orden: o.code, de: o.status, a: to });
+  res.json(await loadOrder(o.id));
+});
+
+// Se le avisó al cliente por WhatsApp que su moto está lista
+ordenes.post('/orders/:id/notified', auth(...MANAGERS), async (req, res) => {
+  const o = await loadOrder(String(req.params.id));
+  await q('update orders set notified_at = now() where id = $1', [o.id]);
   res.json(await loadOrder(o.id));
 });
 

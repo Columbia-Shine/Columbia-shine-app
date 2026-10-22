@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Api, METHOD_NAMES, minutesSince, money, MoneyInput, MoneyPipe, STATUS_NAMES, Toast, WhenPipe } from '../core';
+import { Api, METHOD_NAMES, minutesSince, money, MoneyInput, MoneyPipe, readyWhatsapp, STATUS_NAMES, Toast, WhenPipe } from '../core';
 
 @Component({
   selector: 'app-orden',
@@ -48,6 +48,14 @@ import { Api, METHOD_NAMES, minutesSince, money, MoneyInput, MoneyPipe, STATUS_N
                       }
                       <button class="btn" [disabled]="busy()" (click)="move('WASHING')">Devolver a lavado</button>
                     </div>
+                    @if (whatsapp(o); as link) {
+                      <a class="btn" style="align-self: flex-start" [href]="link" target="_blank" rel="noopener" (click)="notified()">
+                        {{ o.notified_at ? 'Avisar de nuevo por WhatsApp' : 'Avisar al cliente por WhatsApp' }}
+                      </a>
+                      @if (o.notified_at) { <p class="chico suave">Se le avisó {{ o.notified_at | cuando }}.</p> }
+                    } @else {
+                      <p class="chico suave">El cliente no tiene celular registrado para avisarle.</p>
+                    }
                   }
                 }
                 @if (o.payment_id && o.status !== 'READY') {
@@ -183,6 +191,8 @@ export class Orden {
     }
   }
 
+  protected whatsapp = readyWhatsapp;
+  notified = () => this.run(() => this.api.post(`/orders/${this.id}/notified`, {}));
   move = (status: string, done?: string) => this.run(() => this.api.post(`/orders/${this.id}/status`, { status }), done);
   assign = (washerId: string) => this.run(() => this.api.post(`/orders/${this.id}/assign`, { washerId }), 'Lavador asignado. Ya le aparece en su celular.');
   removeItem = (itemId: string) => this.run(() => this.api.del(`/orders/${this.id}/items/${itemId}`));
