@@ -3,12 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { DomSanitizer } from '@angular/platform-browser';
 import { Router, RouterLink } from '@angular/router';
 import { Api, homeFor, MoneyPipe, Session, Toast } from '../core';
+import { IgCarousel } from './ig-carousel';
 
-declare global {
-  interface Window {
-    instgrm?: { Embeds: { process(): void } };
-  }
-}
 
 const HOURS = [
   { days: 'Lunes a viernes', hours: '10:00 a. m. – 7:30 p. m.' },
@@ -27,7 +23,7 @@ const FAQ = [
 /** Página pública: quiénes somos, servicios, precios, membresías, Instagram, opiniones y cómo llegar. */
 @Component({
   selector: 'app-landing',
-  imports: [FormsModule, RouterLink, MoneyPipe],
+  imports: [FormsModule, RouterLink, MoneyPipe, IgCarousel],
   template: `
     <div class="landing">
       <header class="nav">
@@ -132,69 +128,41 @@ const FAQ = [
         </section>
       }
 
+
       @if (site()?.instagramPosts?.length || site()?.instagram) {
         <section class="seccion alterna">
-          <p class="rotulo amarillo">Instagram</p>
-          <h2>Así quedan las motos</h2>
-          @if (site()?.instagramPosts?.length) {
-            <div class="feed">
-              @for (p of site().instagramPosts; track p) {
-                <blockquote class="instagram-media" [attr.data-instgrm-permalink]="p" data-instgrm-version="14"><a [href]="p" target="_blank" rel="noopener">Ver en Instagram</a></blockquote>
-              }
+          <div class="encabezado-seccion">
+            <div>
+              <p class="rotulo amarillo">Instagram</p>
+              <h2>Así quedan las motos</h2>
             </div>
-          }
-          @if (site()?.instagram) {
-            <a class="btn" style="align-self: center" [href]="'https://instagram.com/' + site().instagram" target="_blank" rel="noopener">Síguenos en Instagram @{{ site().instagram }}</a>
+            @if (site()?.instagram) {
+              <a class="ig-chip" [href]="'https://instagram.com/' + site().instagram" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.4" cy="6.6" r="1.3" fill="currentColor"/></svg>
+                <span>&#64;{{ site().instagram }}</span>
+              </a>
+            }
+          </div>
+          @if (site()?.instagramPosts?.length) {
+            <app-ig-carousel [posts]="site().instagramPosts" />
+          } @else {
+            <p class="suave">Mira nuestros trabajos más recientes en Instagram.</p>
           }
         </section>
       }
 
-      <section id="opiniones" class="seccion">
-        <p class="rotulo amarillo">Opiniones</p>
-        <h2>Lo que dicen nuestros clientes</h2>
-        @if (site()?.score?.n) {
-          <div class="puntaje"><strong>{{ site().score.avg }}</strong> <span class="estrellas">{{ stars(round(site().score.avg)) }}</span> <span class="suave">· {{ site().score.n }} opiniones</span></div>
-          <div class="opiniones">
-            @for (r of site().reviews; track r.id) {
-              <figure class="opinion">
-                <div class="estrellas">{{ stars(r.rating) }}</div>
-                <blockquote>"{{ r.comment }}"</blockquote>
-                <figcaption>{{ r.name }}</figcaption>
-              </figure>
-            }
+      <section class="seccion">
+        <div class="sobre-grid">
+          <div class="col" style="gap: 12px">
+            <p class="rotulo amarillo">Sobre nosotros</p>
+            <h2>Somos Columbia Shine</h2>
+            <p class="sobre">{{ site()?.about || defaultAbout }}</p>
           </div>
-        } @else {
-          <p class="suave">Sé de los primeros en contarnos cómo te fue.</p>
-        }
-
-        <div class="dejar card col">
-          @if (sent()) {
-            <h3>¡Gracias por tu opinión!</h3>
-            <p class="suave">La publicaremos después de revisarla.</p>
-          } @else {
-            <h3>Cuéntanos cómo te fue</h3>
-            <div class="row" role="radiogroup" aria-label="Calificación">
-              @for (n of [1, 2, 3, 4, 5]; track n) {
-                <button class="estrella" role="radio" [attr.aria-checked]="rating() === n" [attr.aria-label]="n + ' de 5'" [class.llena]="n <= rating()" (click)="rating.set(n)">★</button>
-              }
-            </div>
-            <div><label for="op-nombre">Tu nombre</label><input id="op-nombre" class="campo" maxlength="60" [(ngModel)]="name" /></div>
-            <div><label for="op-texto">Tu comentario</label><textarea id="op-texto" class="campo" rows="3" maxlength="500" [(ngModel)]="comment"></textarea></div>
-            <button class="btn primario" style="align-self: flex-start" [disabled]="busy()" (click)="sendReview()">Enviar opinión</button>
-          }
-          @if (site()?.googleReviewsUrl) {
-            <a class="chico" [href]="site().googleReviewsUrl" target="_blank" rel="noopener">También puedes calificarnos en Google</a>
-          }
+          <img src="logo.png" alt="" width="260" height="250" loading="lazy" />
         </div>
       </section>
 
-      <section class="seccion alterna">
-        <p class="rotulo amarillo">Sobre nosotros</p>
-        <h2>Somos Columbia Shine</h2>
-        <p class="sobre">{{ site()?.about || defaultAbout }}</p>
-      </section>
-
-      <section id="ubicacion" class="seccion">
+      <section id="ubicacion" class="seccion alterna">
         <p class="rotulo amarillo">Horario y ubicación</p>
         <h2>Te esperamos</h2>
         <div class="ubicacion">
@@ -215,13 +183,63 @@ const FAQ = [
         </div>
       </section>
 
-      <section class="seccion alterna">
+      <section class="seccion">
         <p class="rotulo amarillo">Preguntas frecuentes</p>
         <h2>Lo que más nos preguntan</h2>
         <div class="faq">
           @for (f of faq; track f.q) {
             <details><summary>{{ f.q }}</summary><p>{{ f.a }}</p></details>
           }
+        </div>
+      </section>
+
+      <section id="opiniones" class="seccion alterna">
+        <div class="encabezado-seccion">
+          <div>
+            <p class="rotulo amarillo">Opiniones</p>
+            <h2>Lo que dicen nuestros clientes</h2>
+          </div>
+          @if (site()?.score?.n) {
+            <div class="puntaje">
+              <strong>{{ site().score.avg }}</strong>
+              <div><div class="estrellas">{{ stars(round(site().score.avg)) }}</div><div class="chico suave">{{ site().score.n }} {{ site().score.n === 1 ? 'opinión' : 'opiniones' }}</div></div>
+            </div>
+          }
+        </div>
+        <div class="opiniones-grid">
+          <div class="opiniones">
+            @for (r of site()?.reviews ?? []; track r.id) {
+              <figure class="opinion">
+                <span class="comillas" aria-hidden="true">“</span>
+                <blockquote>{{ r.comment }}</blockquote>
+                <figcaption>
+                  <span class="inicial" aria-hidden="true">{{ r.name.charAt(0) }}</span>
+                  <span><strong>{{ r.name }}</strong><span class="estrellas chico">{{ stars(r.rating) }}</span></span>
+                </figcaption>
+              </figure>
+            } @empty {
+              <p class="suave">Sé de los primeros en contarnos cómo te fue.</p>
+            }
+          </div>
+          <div class="dejar card col">
+            @if (sent()) {
+              <h3>¡Gracias por tu opinión!</h3>
+              <p class="suave">La publicaremos después de revisarla.</p>
+            } @else {
+              <h3>Cuéntanos cómo te fue</h3>
+              <div class="row" style="gap: 0" role="radiogroup" aria-label="Calificación">
+                @for (n of [1, 2, 3, 4, 5]; track n) {
+                  <button class="estrella" role="radio" [attr.aria-checked]="rating() === n" [attr.aria-label]="n + ' de 5'" [class.llena]="n <= rating()" (click)="rating.set(n)">★</button>
+                }
+              </div>
+              <div><label for="op-nombre">Tu nombre</label><input id="op-nombre" class="campo" maxlength="60" [(ngModel)]="name" /></div>
+              <div><label for="op-texto">Tu comentario</label><textarea id="op-texto" class="campo" rows="3" maxlength="500" [(ngModel)]="comment"></textarea></div>
+              <button class="btn primario" style="align-self: flex-start" [disabled]="busy()" (click)="sendReview()">Enviar opinión</button>
+            }
+            @if (site()?.googleReviewsUrl) {
+              <a class="chico" [href]="site().googleReviewsUrl" target="_blank" rel="noopener">También puedes calificarnos en Google</a>
+            }
+          </div>
         </div>
       </section>
 
@@ -243,7 +261,7 @@ const FAQ = [
     </div>
   `,
   styles: `
-    .landing { background: var(--fondo); }
+
     .nav { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 10px 20px; background: rgba(11, 15, 23, 0.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--gris-oscuro); }
     .marca-nav { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 800; font-style: italic; font-size: 18px; }
     .nav nav { display: flex; gap: 4px; flex: 1; justify-content: center; }
@@ -251,6 +269,7 @@ const FAQ = [
     .nav nav a:hover { color: var(--amarillo); }
     @media (max-width: 760px) { .nav nav { display: none; } .marca-nav span { display: none; } .nav { justify-content: space-between; } }
 
+    .landing { overflow-x: hidden; background: radial-gradient(900px 500px at 85% 0%, rgba(0, 71, 163, 0.35), transparent 60%), var(--fondo); }
     .hero { display: grid; grid-template-columns: 1.2fr 1fr; gap: 32px; align-items: center; max-width: 1180px; margin: 0 auto; padding: 56px 20px 40px; }
     .hero h1 { font-size: clamp(40px, 7vw, 72px); line-height: 1.02; margin: 8px 0 16px; }
     .bajada { font-size: 19px; color: var(--texto-suave); max-width: 560px; margin: 0 0 24px; }
@@ -271,7 +290,8 @@ const FAQ = [
     .seccion h2 { font-size: clamp(28px, 4vw, 40px); font-style: italic; font-weight: 800; margin-top: 0; margin-bottom: 12px; }
 
     .tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-    .servicio { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 22px; border-radius: var(--radio); background: var(--panel); border: 1px solid var(--gris-oscuro); }
+    .servicio { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 22px; border-radius: var(--radio); background: var(--panel); border: 1px solid var(--gris-oscuro); transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s; }
+    .servicio:hover { transform: translateY(-3px); border-color: var(--azul); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35); }
     .servicio.destacado { border: 2px solid var(--amarillo); }
     .servicio .etiqueta { position: absolute; top: -12px; left: 18px; }
     .servicio h3 { margin: 6px 0 0; font-size: 22px; font-style: italic; }
@@ -281,32 +301,46 @@ const FAQ = [
     .adicionales { display: flex; flex-wrap: wrap; gap: 8px; }
 
     .pasos-trabajo { list-style: none; counter-reset: paso; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 0; margin: 0; }
-    .pasos-trabajo li { counter-increment: paso; display: flex; flex-direction: column; gap: 6px; padding: 20px; border-radius: var(--radio); background: var(--gris-oscuro); }
+    .pasos-trabajo li { counter-increment: paso; display: flex; flex-direction: column; gap: 6px; padding: 20px; border-radius: var(--radio); background: var(--fondo); border: 1px solid var(--gris-oscuro); }
     .pasos-trabajo li::before { content: counter(paso); width: 40px; height: 40px; border-radius: 50%; background: var(--amarillo); color: var(--negro); font-weight: 800; display: flex; align-items: center; justify-content: center; }
     .pasos-trabajo span { color: var(--texto-suave); }
 
-    .feed { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
-    .feed .instagram-media { margin: 0 !important; min-width: 0 !important; width: 100% !important; }
+    .encabezado-seccion { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+    .encabezado-seccion h2 { margin-bottom: 0 !important; }
+    .ig-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 12px; border-radius: 999px; color: #fff; font-weight: 700; font-size: 14px;
+      background: linear-gradient(var(--panel), var(--panel)) padding-box, linear-gradient(45deg, #f9ce34, #ee2a7b, #6228d7) border-box; border: 2px solid transparent; transition: transform 0.15s; }
+    .ig-chip:hover { transform: translateY(-1px); }
+    .ig-chip svg { color: #ee2a7b; }
 
-    .puntaje { font-size: 20px; }
-    .puntaje strong { font-size: 40px; color: var(--amarillo); }
+    .puntaje { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-radius: 999px; background: var(--fondo); }
+    .puntaje strong { font-size: 36px; color: var(--amarillo); line-height: 1; }
+    .opiniones-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; }
+    @media (max-width: 900px) { .opiniones-grid { grid-template-columns: 1fr; } }
     .estrellas { color: var(--amarillo); letter-spacing: 2px; }
-    .opiniones { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-    .opinion { margin: 0; padding: 20px; border-radius: var(--radio); background: var(--panel); border: 1px solid var(--gris-oscuro); display: flex; flex-direction: column; gap: 10px; }
-    .opinion blockquote { margin: 0; font-size: 16px; }
-    .opinion figcaption { color: var(--texto-suave); font-weight: 700; }
-    .dejar { max-width: 560px; margin-top: 20px; gap: 12px; }
+    .opiniones { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .opinion { position: relative; margin: 0; padding: 22px 20px 18px; border-radius: var(--radio); background: var(--fondo); border: 1px solid var(--gris-oscuro); display: flex; flex-direction: column; gap: 14px; }
+    .comillas { position: absolute; top: -6px; right: 16px; font-size: 64px; line-height: 1; color: var(--azul); opacity: 0.5; font-family: Georgia, serif; }
+    .opinion blockquote { margin: 0; font-size: 16px; line-height: 1.5; }
+    .opinion figcaption { display: flex; align-items: center; gap: 10px; }
+    .opinion figcaption > span:last-child { display: flex; flex-direction: column; }
+    .inicial { width: 38px; height: 38px; border-radius: 50%; background: var(--azul-oscuro); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; text-transform: uppercase; }
+    .dejar { gap: 12px; background: var(--fondo); }
     .estrella { width: 48px; height: 48px; font-size: 30px; border: 0; background: none; color: var(--gris-medio); cursor: pointer; }
     .estrella.llena { color: var(--amarillo); }
 
-    .sobre { font-size: 18px; color: var(--texto-suave); max-width: 820px; white-space: pre-line; }
+    .sobre { font-size: 18px; color: var(--texto-suave); max-width: 720px; white-space: pre-line; margin: 0; }
+    .sobre-grid { display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: center; }
+    .sobre-grid img { width: 220px; height: auto; opacity: 0.9; }
+    @media (max-width: 760px) { .sobre-grid { grid-template-columns: 1fr; } .sobre-grid img { display: none; } }
     .ubicacion { display: grid; grid-template-columns: 1fr 1.2fr; gap: 24px; align-items: start; }
     .horario { padding: 12px 0; border-bottom: 1px solid var(--gris-oscuro); }
     .mapa { width: 100%; height: 320px; border: 0; border-radius: var(--radio); }
     @media (max-width: 860px) { .ubicacion { grid-template-columns: 1fr; } }
 
     .faq { display: flex; flex-direction: column; gap: 10px; }
-    .faq details { background: var(--gris-oscuro); border-radius: 12px; padding: 4px 18px; }
+    .faq details { background: var(--panel); border: 1px solid var(--gris-oscuro); border-radius: 12px; padding: 4px 18px; }
+    .faq details[open] { border-color: var(--azul-oscuro); }
+    .faq summary::marker { color: var(--amarillo); }
     .faq summary { min-height: 52px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
     .faq p { color: var(--texto-suave); margin: 0 0 14px; }
 
@@ -367,7 +401,6 @@ export class Landing {
     }
     this.api.get('/public/site').then((s) => {
       this.site.set(s);
-      if (s.instagramPosts?.length) this.loadInstagram();
     }, this.toast.fail);
   }
 
@@ -377,21 +410,6 @@ export class Landing {
   planLink = (p: any) => `https://wa.me/57${this.site()?.whatsapp}?text=${encodeURIComponent('Hola Columbia Shine, me interesa la membresía ' + p.name + '.')}`;
   saving = (p: any) => p.washes * p.service_price - p.price;
 
-  /** Las publicaciones de Instagram se muestran con el código oficial de inserción de Instagram. */
-  private loadInstagram() {
-    const process = () => {
-      setTimeout(() => window.instgrm?.Embeds.process(), 0);
-    };
-    if (window.instgrm) {
-      process();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://www.instagram.com/embed.js';
-    script.async = true;
-    script.onload = process;
-    document.body.appendChild(script);
-  }
 
   async sendReview() {
     if (!this.name().trim() || !this.comment().trim()) return this.toast.show('Escribe tu nombre y tu comentario.', true);

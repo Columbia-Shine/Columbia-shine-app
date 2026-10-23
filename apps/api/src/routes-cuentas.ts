@@ -178,11 +178,25 @@ cuentas.patch('/services/:id', auth('OWNER'), async (req, res) => {
   res.json({ ok: true });
 });
 
-cuentas.get('/audit', auth('OWNER'), async (_req, res) => {
-  res.json(
-    await q(
-      `select a.id, a.action, a.entity, a.detail, a.created_at, u.name as user_name
-       from audit_log a left join users u on u.id = a.user_id order by a.id desc limit 200`,
-    ),
+// Auditoría paginada, con filtro por persona y por tipo de acción
+cuentas.get('/audit', auth('OWNER'), async (req, res) => {
+  const size = Math.min(Math.max(Number(req.query.size) || 10, 5), 50);
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const user = String(req.query.user ?? '');
+  const action = String(req.query.action ?? '');
+  const where: string[] = [];
+  const params: unknown[] = [];
+  if (user) where.push(`a.user_id = $${params.push(user)}`);
+  if (action) where.push(`a.action = $${params.push(action)}`);
+  const w = where.length ? 'where ' + where.join(' and ') : '';
+  const total = Number((await one(`select count(*) as n from audit_log a ${w}`, params)).n);
+  const rows = await q(
+    `select a.id, a.action, a.entity, a.detail, a.created_at, u.name as user_name
+     from audit_log a left join users u on u.id = a.user_id ${w}
+     order by a.created_at desc, a.id desc limit ${size} offset ${(page - 1) * size}`,
+    params,
   );
+  const users = await q(`select distinct u.id, u.name from audit_log a join users u on u.id = a.user_id order by u.name`);
+  const actions = (await q(`select distinct action from audit_log order by action`)).map((r) => r.action);
+  res.json({ rows, total, page, size, pages: Math.max(1, Math.ceil(total / size)), users, actions });
 });

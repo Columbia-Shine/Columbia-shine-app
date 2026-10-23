@@ -104,10 +104,15 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Los clientes de afán no aparecen en esa búsqueda.
 - Si el cliente trae varias motos a la vez: "Crear y recibir otra moto de este cliente" crea la orden y deja la recepción lista para la siguiente placa con el cliente ya elegido (modo "Ya es cliente"), conservando el servicio.
 
+## Ajustes por pestañas
+
+- Ajustes es una sola entrada del menú con tres vistas (`pages/ajustes-nav.ts`): `/ajustes` (equipo, precios, membresías, permisos), `/ajustes/pagina` (página pública: contacto, sobre nosotros, publicaciones de Instagram como tarjetas que se agregan, ordenan y quitan con vista previa, y opiniones por estado) y `/ajustes/auditoria` (historial paginado de a 10 con filtro por persona y por acción; `GET /audit?page&size&user&action`). Los nombres de las acciones están en `ACTIONS` de `pages/auditoria.ts`: al crear una acción nueva en `audit()`, agregar su nombre ahí.
+
 ## Página pública (landing)
 
 - `/` es la página pública (`pages/landing.ts`), sin menú interno: servicios y precios, cómo trabajamos, membresías, publicaciones de Instagram (inserción oficial de Instagram con los enlaces que pone el dueño), opiniones, sobre nosotros, horario y mapa, preguntas frecuentes. El tablero del equipo está en `/inicio` (`homeFor()`); quien ya entró como equipo y abre `/` va a su pantalla.
-- Contenido editable en Ajustes → "Página pública" (`settings` clave `site`): WhatsApp, Instagram, dirección, enlaces de Maps y de reseñas de Google, "sobre nosotros" y hasta 12 publicaciones de Instagram. Las secciones sin datos no se muestran.
+- Orden de la página: portada, cifras, servicios, cómo trabajamos, membresías, Instagram (carrusel `pages/ig-carousel.ts` con flechas y deslizable), sobre nosotros, horario y ubicación, preguntas frecuentes, **opiniones (penúltima)** y cierre.
+- Contenido editable en `/ajustes/pagina` (pestaña "Página pública" de Ajustes; `settings` clave `site`): WhatsApp, Instagram, dirección, enlaces de Maps y de reseñas de Google, "sobre nosotros" y hasta 12 publicaciones de Instagram. Las secciones sin datos no se muestran.
 - Opiniones (`reviews`): cualquiera las deja sin cuenta (máximo 3 por hora por dirección), llegan PENDIENTE y solo se ven cuando el dueño las publica. **No inventar opiniones ni cifras**: las cifras (motos entregadas, clientes, calificación) salen de la base y solo se muestran cuando son significativas (≥ 50 motos, ≥ 30 clientes, ≥ 3 opiniones).
 - `GET /public/site` no devuelve costos internos (`direct_cost`).
 
