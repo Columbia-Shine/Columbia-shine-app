@@ -136,3 +136,9 @@ th.der, td.der { padding-right: 0; padding-left: 8px; }
   .page { padding: 0; }
   .recibo { max-width: none; padding: 0; }
 }
+
+/* Aparecer al bajar (directiva [aparecer] de la página pública) */
+.aparecer { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+.aparecer.visible { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .aparecer { opacity: 1; transform: none; transition: none; } }
+@media print { .aparecer { opacity: 1; transform: none; } }

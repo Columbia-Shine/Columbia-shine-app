@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { DomSanitizer } from '@angular/platform-browser';
 import { Router, RouterLink } from '@angular/router';
 import { Api, homeFor, MoneyPipe, Session, Toast } from '../core';
+import { AntesDespues, Aparecer } from './antes-despues';
 import { IgCarousel } from './ig-carousel';
 
 
@@ -23,13 +24,14 @@ const FAQ = [
 /** Página pública: quiénes somos, servicios, precios, membresías, Instagram, opiniones y cómo llegar. */
 @Component({
   selector: 'app-landing',
-  imports: [FormsModule, RouterLink, MoneyPipe, IgCarousel],
+  imports: [FormsModule, RouterLink, MoneyPipe, IgCarousel, AntesDespues, Aparecer],
   template: `
     <div class="landing">
       <header class="nav">
-        <a class="marca-nav" href="#inicio"><img src="logo.png" alt="" width="44" height="42" /> <span>Columbia Shine</span></a>
+        <a class="marca-nav" href="#inicio"><img src="logo-96.webp" alt="" width="44" height="42" /> <span>Columbia Shine</span></a>
         <nav aria-label="Secciones">
           <a href="#servicios">Servicios</a>
+          @if (beforeAfter().length) { <a href="#resultados">Resultados</a> }
           @if (site()?.plans?.length) { <a href="#membresias">Membresías</a> }
           <a href="#opiniones">Opiniones</a>
           <a href="#ubicacion">Ubicación</a>
@@ -53,8 +55,25 @@ const FAQ = [
             <li>Paga con Nequi o efectivo</li>
           </ul>
         </div>
-        <div class="hero-logo"><img src="logo.png" alt="Columbia Shine, pasión por tu máquina" width="380" height="366" /></div>
+        @if (cover(); as c) {
+          <div class="hero-foto"><img [src]="c.url" [alt]="c.title || 'Moto brillando en Columbia Shine'" width="560" height="420" /><img class="sello-logo" src="logo-96.webp" alt="" width="84" height="81" /></div>
+        } @else {
+          <div class="hero-logo"><img src="logo-480.webp" alt="Columbia Shine, pasión por tu máquina" width="380" height="366" fetchpriority="high" /></div>
+        }
       </section>
+
+      @if (site()?.promos?.length) {
+        <section class="promos" aparecer aria-label="Promociones">
+          @for (p of site().promos; track p.title) {
+            <article class="promo">
+              <span class="etiqueta amarilla">Promoción</span>
+              <h3>{{ p.title }}</h3>
+              @if (p.text) { <p>{{ p.text }}</p> }
+              @if (p.until) { <span class="chico">Hasta el {{ dayName(p.until) }}</span> }
+            </article>
+          }
+        </section>
+      }
 
       @if (stats(); as st) {
         <section class="cifras">
@@ -65,7 +84,7 @@ const FAQ = [
         </section>
       }
 
-      <section id="servicios" class="seccion">
+      <section id="servicios" class="seccion" aparecer>
         <p class="rotulo amarillo">Servicios</p>
         <h2>Elige el brillo que tu moto necesita</h2>
         <div class="tarjetas">
@@ -84,6 +103,24 @@ const FAQ = [
             </article>
           }
         </div>
+        @if (bases().length > 1) {
+          <details class="comparar">
+            <summary>Comparar servicios</summary>
+            <div class="tabla-caja">
+              <table>
+                <thead><tr><th></th>@for (s of bases(); track s.id) { <th>{{ s.name }}</th> }</tr></thead>
+                <tbody>
+                  <tr><td>Precio</td>@for (s of bases(); track s.id) { <td class="fuerte amarillo">{{ s.price | money }}</td> }</tr>
+                  <tr><td>Tiempo</td>@for (s of bases(); track s.id) { <td>{{ s.min_minutes }}–{{ s.max_minutes }} min</td> }</tr>
+                  <tr><td>Ideal para</td>@for (s of bases(); track s.id) { <td>{{ s.focus }}</td> }</tr>
+                  @for (step of allSteps(); track step) {
+                    <tr><td>{{ step }}</td>@for (s of bases(); track s.id) { <td class="marca-celda">{{ s.steps?.includes(step) ? '✓' : '—' }}</td> }</tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </details>
+        }
         @if (extras().length) {
           <h3 style="margin-top: 28px">Adicionales</h3>
           <div class="adicionales">
@@ -95,7 +132,20 @@ const FAQ = [
         }
       </section>
 
-      <section class="seccion alterna">
+      @if (beforeAfter().length) {
+        <section id="resultados" class="seccion alterna" aparecer>
+          <p class="rotulo amarillo">Resultados</p>
+          <h2>Antes y después</h2>
+          <p class="suave">Arrastra la línea para ver la diferencia.</p>
+          <div class="galeria">
+            @for (i of beforeAfter(); track i.id) {
+              <app-antes-despues [before]="i.before" [after]="i.url" [title]="i.title" [caption]="i.caption" />
+            }
+          </div>
+        </section>
+      }
+
+      <section class="seccion" aparecer>
         <p class="rotulo amarillo">Así trabajamos</p>
         <h2>Simple, a tiempo y sin sorpresas</h2>
         <ol class="pasos-trabajo">
@@ -107,7 +157,7 @@ const FAQ = [
       </section>
 
       @if (site()?.plans?.length) {
-        <section id="membresias" class="seccion">
+        <section id="membresias" class="seccion alterna" aparecer>
           <p class="rotulo amarillo">Membresías</p>
           <h2>Tu moto siempre impecable, por menos</h2>
           <p class="suave">Paga una vez y usa tus lavados durante 30 días.</p>
@@ -130,7 +180,7 @@ const FAQ = [
 
 
       @if (site()?.instagramPosts?.length || site()?.instagram) {
-        <section class="seccion alterna">
+        <section class="seccion" aparecer>
           <div class="encabezado-seccion">
             <div>
               <p class="rotulo amarillo">Instagram</p>
@@ -151,18 +201,45 @@ const FAQ = [
         </section>
       }
 
-      <section class="seccion">
+      @if (site()?.business?.show) {
+        <section class="seccion alterna" aparecer>
+          <div class="empresas">
+            <div class="col" style="gap: 12px">
+              <p class="rotulo amarillo">Empresas y domiciliarios</p>
+              <h2>¿Tienes varias motos trabajando?</h2>
+              <p class="sobre">{{ site().business.text || defaultBusiness }}</p>
+            </div>
+            @if (businessLink(); as b) {
+              <a class="btn primario grande" [href]="b" target="_blank" rel="noopener">Cotiza para tu flota</a>
+            }
+          </div>
+        </section>
+      }
+
+      @if (team().length) {
+        <section class="seccion" aparecer>
+          <p class="rotulo amarillo">Nuestro equipo</p>
+          <h2>Las manos detrás del brillo</h2>
+          <div class="equipo">
+            @for (t of team(); track t.id) {
+              <figure class="persona"><img [src]="t.url" [alt]="t.title || 'Equipo de Columbia Shine'" loading="lazy" width="300" height="300" /><figcaption><strong>{{ t.title }}</strong>@if (t.caption) { <span>{{ t.caption }}</span> }</figcaption></figure>
+            }
+          </div>
+        </section>
+      }
+
+      <section class="seccion alterna" aparecer>
         <div class="sobre-grid">
           <div class="col" style="gap: 12px">
             <p class="rotulo amarillo">Sobre nosotros</p>
             <h2>Somos Columbia Shine</h2>
             <p class="sobre">{{ site()?.about || defaultAbout }}</p>
           </div>
-          <img src="logo.png" alt="" width="260" height="250" loading="lazy" />
+          <img src="logo-240.webp" alt="" width="220" height="212" loading="lazy" />
         </div>
       </section>
 
-      <section id="ubicacion" class="seccion alterna">
+      <section id="ubicacion" class="seccion" aparecer>
         <p class="rotulo amarillo">Horario y ubicación</p>
         <h2>Te esperamos</h2>
         <div class="ubicacion">
@@ -183,7 +260,7 @@ const FAQ = [
         </div>
       </section>
 
-      <section class="seccion">
+      <section class="seccion alterna" aparecer>
         <p class="rotulo amarillo">Preguntas frecuentes</p>
         <h2>Lo que más nos preguntan</h2>
         <div class="faq">
@@ -193,7 +270,7 @@ const FAQ = [
         </div>
       </section>
 
-      <section id="opiniones" class="seccion alterna">
+      <section id="opiniones" class="seccion" aparecer>
         <div class="encabezado-seccion">
           <div>
             <p class="rotulo amarillo">Opiniones</p>
@@ -248,8 +325,17 @@ const FAQ = [
         <a class="btn primario grande" routerLink="/cliente">Agenda tu lavado</a>
       </section>
 
+      @if (whatsapp(); as w) {
+        <a class="wa-flotante" [href]="w" target="_blank" rel="noopener" aria-label="Escríbenos por WhatsApp"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.2c0-.1-.2-.2-.4-.3Z"/></svg></a>
+      }
+      <nav class="barra-movil" aria-label="Acciones rápidas">
+        <a routerLink="/cliente" class="principal">Agendar</a>
+        @if (whatsapp(); as w) { <a [href]="w" target="_blank" rel="noopener">WhatsApp</a> }
+        @if (mapLink(); as m) { <a [href]="m" target="_blank" rel="noopener">Cómo llegar</a> }
+      </nav>
+
       <footer class="pie">
-        <div class="row" style="gap: 10px"><img src="logo.png" alt="" width="36" height="35" /> <strong>Columbia Shine</strong> · Pasión por tu máquina.</div>
+        <div class="row" style="gap: 10px"><img src="logo-96.webp" alt="" width="36" height="35" /> <strong>Columbia Shine</strong> · Pasión por tu máquina.</div>
         <div class="row chico">
           @if (site()?.instagram) { <a [href]="'https://instagram.com/' + site().instagram" target="_blank" rel="noopener">Instagram</a> }
           @if (whatsapp(); as w) { <a [href]="w" target="_blank" rel="noopener">WhatsApp</a> }
@@ -279,6 +365,44 @@ const FAQ = [
     .sellos li { padding: 8px 14px; border-radius: 999px; background: var(--gris-oscuro); font-size: 14px; font-weight: 600; }
     @media (max-width: 860px) { .hero { grid-template-columns: 1fr; padding-top: 28px; } .hero-logo { order: -1; } .hero-logo img { width: 220px; } }
 
+    .hero-foto { position: relative; }
+    .hero-foto img:first-child { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 20px; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45); }
+    .sello-logo { position: absolute; left: -18px; bottom: -18px; width: 84px; height: auto; filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.5)); }
+    @media (max-width: 860px) { .hero-foto { order: -1; } .sello-logo { left: 10px; bottom: -14px; width: 64px; } }
+
+    .promos { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; max-width: 1180px; margin: 0 auto; padding: 0 20px 24px; }
+    .promo { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; border-radius: var(--radio); background: linear-gradient(135deg, rgba(255, 210, 0, 0.16), rgba(0, 71, 163, 0.3)); border: 1px solid rgba(255, 210, 0, 0.45); }
+    .promo h3 { margin: 4px 0 0; font-size: 22px; font-style: italic; }
+    .promo p { margin: 0; color: var(--texto-suave); }
+    .promo .etiqueta { align-self: flex-start; }
+
+    .comparar { margin-top: 18px; border: 1px solid var(--gris-oscuro); border-radius: var(--radio); padding: 4px 18px; background: var(--panel); }
+    .comparar summary { min-height: 52px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
+    .comparar table { min-width: 640px; }
+    .comparar td, .comparar th { text-align: center; }
+    .comparar td:first-child, .comparar th:first-child { text-align: left; color: var(--texto-suave); }
+    .marca-celda { color: var(--aqua); font-weight: 800; }
+
+    .galeria { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+    .empresas { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+    .equipo { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .persona { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    .persona img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--radio); }
+    .persona figcaption { display: flex; flex-direction: column; }
+    .persona figcaption span { color: var(--texto-suave); }
+
+    .wa-flotante { position: fixed; right: 20px; bottom: 20px; z-index: 20; width: 60px; height: 60px; border-radius: 50%; background: #25d366; color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); transition: transform 0.15s; }
+    .wa-flotante:hover { transform: scale(1.06); }
+    .wa-flotante svg { width: 32px; height: 32px; }
+    .barra-movil { display: none; }
+    @media (max-width: 760px) {
+      .wa-flotante { display: none; }
+      .barra-movil { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: rgba(11, 15, 23, 0.96); border-top: 1px solid var(--gris-oscuro); backdrop-filter: blur(8px); }
+      .barra-movil a { flex: 1; min-height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 12px; border: 1px solid var(--gris-medio); color: #fff; font-weight: 700; }
+      .barra-movil a.principal { background: var(--amarillo); color: var(--negro); border-color: var(--amarillo); }
+      .pie { padding-bottom: 96px; }
+    }
+
     .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; max-width: 1180px; margin: 0 auto; padding: 0 20px 20px; }
     .cifras div { background: var(--azul-oscuro); border-radius: var(--radio); padding: 18px; display: flex; flex-direction: column; }
     .cifras strong { font-size: 30px; font-weight: 800; }
@@ -301,30 +425,30 @@ const FAQ = [
     .adicionales { display: flex; flex-wrap: wrap; gap: 8px; }
 
     .pasos-trabajo { list-style: none; counter-reset: paso; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 0; margin: 0; }
-    .pasos-trabajo li { counter-increment: paso; display: flex; flex-direction: column; gap: 6px; padding: 20px; border-radius: var(--radio); background: var(--fondo); border: 1px solid var(--gris-oscuro); }
+    .pasos-trabajo li { counter-increment: paso; display: flex; flex-direction: column; gap: 6px; padding: 20px; border-radius: var(--radio); background: var(--panel); border: 1px solid var(--gris-oscuro); }
     .pasos-trabajo li::before { content: counter(paso); width: 40px; height: 40px; border-radius: 50%; background: var(--amarillo); color: var(--negro); font-weight: 800; display: flex; align-items: center; justify-content: center; }
     .pasos-trabajo span { color: var(--texto-suave); }
 
     .encabezado-seccion { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
     .encabezado-seccion h2 { margin-bottom: 0 !important; }
     .ig-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 12px; border-radius: 999px; color: #fff; font-weight: 700; font-size: 14px;
-      background: linear-gradient(var(--panel), var(--panel)) padding-box, linear-gradient(45deg, #f9ce34, #ee2a7b, #6228d7) border-box; border: 2px solid transparent; transition: transform 0.15s; }
+      background: linear-gradient(var(--fondo), var(--fondo)) padding-box, linear-gradient(45deg, #f9ce34, #ee2a7b, #6228d7) border-box; border: 2px solid transparent; transition: transform 0.15s; }
     .ig-chip:hover { transform: translateY(-1px); }
     .ig-chip svg { color: #ee2a7b; }
 
-    .puntaje { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-radius: 999px; background: var(--fondo); }
+    .puntaje { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-radius: 999px; background: var(--panel); }
     .puntaje strong { font-size: 36px; color: var(--amarillo); line-height: 1; }
     .opiniones-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; }
     @media (max-width: 900px) { .opiniones-grid { grid-template-columns: 1fr; } }
     .estrellas { color: var(--amarillo); letter-spacing: 2px; }
     .opiniones { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
-    .opinion { position: relative; margin: 0; padding: 22px 20px 18px; border-radius: var(--radio); background: var(--fondo); border: 1px solid var(--gris-oscuro); display: flex; flex-direction: column; gap: 14px; }
+    .opinion { position: relative; margin: 0; padding: 22px 20px 18px; border-radius: var(--radio); background: var(--panel); border: 1px solid var(--gris-oscuro); display: flex; flex-direction: column; gap: 14px; }
     .comillas { position: absolute; top: -6px; right: 16px; font-size: 64px; line-height: 1; color: var(--azul); opacity: 0.5; font-family: Georgia, serif; }
     .opinion blockquote { margin: 0; font-size: 16px; line-height: 1.5; }
     .opinion figcaption { display: flex; align-items: center; gap: 10px; }
     .opinion figcaption > span:last-child { display: flex; flex-direction: column; }
     .inicial { width: 38px; height: 38px; border-radius: 50%; background: var(--azul-oscuro); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; text-transform: uppercase; }
-    .dejar { gap: 12px; background: var(--fondo); }
+    .dejar { gap: 12px; }
     .estrella { width: 48px; height: 48px; font-size: 30px; border: 0; background: none; color: var(--gris-medio); cursor: pointer; }
     .estrella.llena { color: var(--amarillo); }
 
@@ -338,7 +462,7 @@ const FAQ = [
     @media (max-width: 860px) { .ubicacion { grid-template-columns: 1fr; } }
 
     .faq { display: flex; flex-direction: column; gap: 10px; }
-    .faq details { background: var(--panel); border: 1px solid var(--gris-oscuro); border-radius: 12px; padding: 4px 18px; }
+    .faq details { background: var(--fondo); border: 1px solid var(--gris-oscuro); border-radius: 12px; padding: 4px 18px; }
     .faq details[open] { border-color: var(--azul-oscuro); }
     .faq summary::marker { color: var(--amarillo); }
     .faq summary { min-height: 52px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
@@ -367,6 +491,19 @@ export class Landing {
   protected sent = signal(false);
   protected busy = signal(false);
 
+  protected defaultBusiness =
+    'Si tienes una flota de mensajería, domicilios o motos de trabajo, armamos un plan para que estén siempre limpias, con horarios que no frenen tu operación y un solo pago al mes.';
+  protected images = computed(() => this.site()?.images ?? []);
+  protected beforeAfter = computed(() => this.images().filter((i: any) => i.kind === 'ANTES_DESPUES' && i.before));
+  protected team = computed(() => this.images().filter((i: any) => i.kind === 'EQUIPO'));
+  protected cover = computed(() => this.images().find((i: any) => i.kind === 'PORTADA') ?? null);
+  /** Todos los pasos de los servicios, en orden de aparición, para el comparador */
+  protected allSteps = computed(() => [...new Set(this.bases().flatMap((s: any) => s.steps ?? []))] as string[]);
+  protected businessLink = computed(() => {
+    const w = this.site()?.whatsapp;
+    return w ? `https://wa.me/57${w}?text=${encodeURIComponent('Hola Columbia Shine, quiero cotizar un plan de lavado para mi flota de motos.')}` : null;
+  });
+  dayName = (d: string) => new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(d + 'T12:00:00Z'));
   protected bases = computed(() => (this.site()?.services ?? []).filter((s: any) => s.kind === 'BASE'));
   protected extras = computed(() => (this.site()?.services ?? []).filter((s: any) => s.kind === 'EXTRA'));
   protected whatsapp = computed(() => {

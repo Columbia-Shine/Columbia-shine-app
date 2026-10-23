@@ -27,7 +27,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 017_pagina_publica.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 018_fotos_pagina.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -111,8 +111,10 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 ## Página pública (landing)
 
 - `/` es la página pública (`pages/landing.ts`), sin menú interno: servicios y precios, cómo trabajamos, membresías, publicaciones de Instagram (inserción oficial de Instagram con los enlaces que pone el dueño), opiniones, sobre nosotros, horario y mapa, preguntas frecuentes. El tablero del equipo está en `/inicio` (`homeFor()`); quien ya entró como equipo y abre `/` va a su pantalla.
-- Orden de la página: portada, cifras, servicios, cómo trabajamos, membresías, Instagram (carrusel `pages/ig-carousel.ts` con flechas y deslizable), sobre nosotros, horario y ubicación, preguntas frecuentes, **opiniones (penúltima)** y cierre.
-- Contenido editable en `/ajustes/pagina` (pestaña "Página pública" de Ajustes; `settings` clave `site`): WhatsApp, Instagram, dirección, enlaces de Maps y de reseñas de Google, "sobre nosotros" y hasta 12 publicaciones de Instagram. Las secciones sin datos no se muestran.
+- Orden de la página: portada (foto o logo), promociones, cifras, servicios (con tabla "Comparar servicios"), resultados (antes y después), cómo trabajamos, membresías, Instagram (carrusel `pages/ig-carousel.ts`), empresas y domiciliarios, equipo, sobre nosotros, horario y ubicación, preguntas frecuentes, **opiniones (penúltima)** y cierre. Botón flotante de WhatsApp en computador y barra fija abajo (Agendar · WhatsApp · Cómo llegar) en celular. Las secciones aparecen con la directiva `Aparecer` (`pages/antes-despues.ts`, clase `.aparecer` de `styles.css`).
+- Contenido editable en `/ajustes/pagina` (pestaña "Página pública" de Ajustes; `settings` clave `site`): WhatsApp, Instagram, dirección, enlaces de Maps y de reseñas de Google, "sobre nosotros" hasta 12 publicaciones de Instagram, hasta 6 promociones (con fecha opcional: vencidas no salen) y la sección de empresas. Las secciones sin datos no se muestran.
+- Fotos de la página en la tabla `site_images` (bytea, `kind` PORTADA, ANTES_DESPUES con `before_data`, EQUIPO): se suben ya reducidas a 1600 px con `POST /site-images` (solo OWNER, máximo 2,5 MB), se sirven en `/api/public/images/:id` (y `/antes`) con caché de 7 días. Una sola portada: la nueva reemplaza la anterior.
+- Búsquedas: el servidor inyecta en el HTML de `/` la ficha schema.org `AutoWash` (JSON-LD con dirección, horario, teléfono y servicios con precio), `canonical` y `og:url` (`seoHead()` en `main.ts`); también sirve `/robots.txt` (bloquea las pantallas internas) y `/sitemap.xml`. Imagen para compartir: `public/og-image.jpg` (1200×630); logos livianos `logo-96/240/480.webp`.
 - Opiniones (`reviews`): cualquiera las deja sin cuenta (máximo 3 por hora por dirección), llegan PENDIENTE y solo se ven cuando el dueño las publica. **No inventar opiniones ni cifras**: las cifras (motos entregadas, clientes, calificación) salen de la base y solo se muestran cuando son significativas (≥ 50 motos, ≥ 30 clientes, ≥ 3 opiniones).
 - `GET /public/site` no devuelve costos internos (`direct_cost`).
 

@@ -17,7 +17,7 @@ export const ACTIONS: Record<string, string> = {
   GASTO_REGISTRADO: 'Registró un gasto por fuera de la caja', GASTO_BORRADO: 'Borró un gasto por fuera de la caja',
   INSUMO_CREADO: 'Creó un insumo', INSUMO_EDITADO: 'Cambió un insumo', INSUMO_COMPRA: 'Registró una compra de insumos', INSUMO_CONTEO: 'Contó un insumo',
   PLAN_CREADO: 'Creó un plan de membresía', PLAN_EDITADO: 'Cambió un plan de membresía', MEMBRESIA_VENDIDA: 'Vendió una membresía',
-  PAGINA_EDITADA: 'Editó la página pública', OPINION_PUBLICADA: 'Publicó una opinión', OPINION_OCULTA: 'Ocultó una opinión', OPINION_PENDIENTE: 'Devolvió una opinión a revisión',
+  PAGINA_EDITADA: 'Editó la página pública', FOTO_PAGINA_SUBIDA: 'Subió una foto a la página', FOTO_PAGINA_BORRADA: 'Quitó una foto de la página', OPINION_PUBLICADA: 'Publicó una opinión', OPINION_OCULTA: 'Ocultó una opinión', OPINION_PENDIENTE: 'Devolvió una opinión a revisión',
 };
 
 /** Detalle legible de una acción, incluido el antes y el después de un cobro corregido. */
