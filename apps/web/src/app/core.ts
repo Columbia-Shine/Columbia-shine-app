@@ -7,7 +7,7 @@ export type User = { id: string; name: string; role: Role; customerId: string | 
 
 const KEY = 'cs-sesion';
 
-export const homeFor = (role: Role): string => (role === 'WASHER' ? '/lavador' : role === 'CLIENT' ? '/agendar' : '/');
+export const homeFor = (role: Role): string => (role === 'WASHER' ? '/lavador' : role === 'CLIENT' ? '/agendar' : '/inicio');
 
 export const ROLE_NAMES: Record<Role, string> = {
   OWNER: 'Propietario',
@@ -127,6 +127,7 @@ export class Api {
   get = <T = any>(path: string) => this.req<T>('GET', path);
   post = <T = any>(path: string, body?: unknown) => this.req<T>('POST', path, body ?? {});
   patch = <T = any>(path: string, body: unknown) => this.req<T>('PATCH', path, body);
+  put = <T = any>(path: string, body: unknown) => this.req<T>('PUT', path, body);
   del = <T = any>(path: string) => this.req<T>('DELETE', path);
 }
 

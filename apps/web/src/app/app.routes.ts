@@ -6,7 +6,8 @@ const managers = only('OWNER', 'ADMIN');
 export const routes: Routes = [
   { path: 'ingreso', title: 'Ingreso · Columbia Shine', loadComponent: () => import('./pages/ingreso').then((m) => m.Ingreso) },
   { path: 'cliente', title: 'Agenda tu lavado · Columbia Shine', loadComponent: () => import('./pages/ingreso').then((m) => m.IngresoCliente) },
-  { path: '', pathMatch: 'full', title: 'Inicio · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/inicio').then((m) => m.Inicio) },
+  { path: '', pathMatch: 'full', title: 'Columbia Shine · Lavado y detailing de motos en Bogotá', loadComponent: () => import('./pages/landing').then((m) => m.Landing) },
+  { path: 'inicio', title: 'Inicio · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/inicio').then((m) => m.Inicio) },
   { path: 'recepcion', title: 'Recepción · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/recepcion').then((m) => m.Recepcion) },
   { path: 'ordenes', title: 'Órdenes · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/ordenes').then((m) => m.Ordenes) },
   { path: 'ordenes/:id', title: 'Orden · Columbia Shine', canActivate: [managers], loadComponent: () => import('./pages/orden').then((m) => m.Orden) },

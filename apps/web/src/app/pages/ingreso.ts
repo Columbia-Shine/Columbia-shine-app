@@ -95,7 +95,7 @@ export class Ingreso {
         <button class="btn primario grande" [disabled]="busy()">{{ register() ? 'Crear cuenta' : 'Entrar' }}</button>
       </form>
       <button class="btn bloque" (click)="register.set(!register())">{{ register() ? 'Ya tengo cuenta' : 'Es mi primera vez: crear cuenta' }}</button>
-      <p class="chico suave"><a routerLink="/ingreso">Ingreso del equipo</a></p>
+      <p class="chico suave"><a routerLink="/">Conoce Columbia Shine</a> · <a routerLink="/ingreso">Ingreso del equipo</a></p>
     </main>
   `,
 })

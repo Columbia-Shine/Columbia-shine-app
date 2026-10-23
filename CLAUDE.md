@@ -20,13 +20,14 @@ apps/api/            Node 22 + Express 5 + TypeScript (CommonJS), SQL directo co
   src/routes-finanzas.ts   Gastos por fuera de la caja y cierre del mes (solo OWNER)
   src/routes-inventario.ts Insumos: compras, conteos, alertas de stock bajo y consumo del mes
   src/routes-membresias.ts Planes y venta de membresías; src/membership.ts activeMembership()
+  src/routes-publico.ts    Página pública (sin sesión) y su edición: contenido y opiniones
 apps/web/            Angular 21, componentes standalone, sin zone.js (todo el estado en signals)
   src/app/core.ts    Api (fetch), Session, Toast, guard only(), pipes money y cuando, utilidades de fecha
   src/app/app.ts     Barra superior y menú según rol
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 016_cobro_conjunto.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 017_pagina_publica.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -102,6 +103,13 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Un cliente puede tener varias motos (`bikes.customer_id`). El cliente las agrega al agendar; en el local, con una placa nueva se elige "Ya es cliente: otra moto", se busca por nombre, celular o placa y se envía `customerId` en `POST /orders`.
 - Los clientes de afán no aparecen en esa búsqueda.
 - Si el cliente trae varias motos a la vez: "Crear y recibir otra moto de este cliente" crea la orden y deja la recepción lista para la siguiente placa con el cliente ya elegido (modo "Ya es cliente"), conservando el servicio.
+
+## Página pública (landing)
+
+- `/` es la página pública (`pages/landing.ts`), sin menú interno: servicios y precios, cómo trabajamos, membresías, publicaciones de Instagram (inserción oficial de Instagram con los enlaces que pone el dueño), opiniones, sobre nosotros, horario y mapa, preguntas frecuentes. El tablero del equipo está en `/inicio` (`homeFor()`); quien ya entró como equipo y abre `/` va a su pantalla.
+- Contenido editable en Ajustes → "Página pública" (`settings` clave `site`): WhatsApp, Instagram, dirección, enlaces de Maps y de reseñas de Google, "sobre nosotros" y hasta 12 publicaciones de Instagram. Las secciones sin datos no se muestran.
+- Opiniones (`reviews`): cualquiera las deja sin cuenta (máximo 3 por hora por dirección), llegan PENDIENTE y solo se ven cuando el dueño las publica. **No inventar opiniones ni cifras**: las cifras (motos entregadas, clientes, calificación) salen de la base y solo se muestran cuando son significativas (≥ 50 motos, ≥ 30 clientes, ≥ 3 opiniones).
+- `GET /public/site` no devuelve costos internos (`direct_cost`).
 
 ## Avisos y pantalla
 

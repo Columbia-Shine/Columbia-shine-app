@@ -18,7 +18,7 @@ const PERMISSIONS: [string, string, string, string][] = [
 const ACTIONS: Record<string, string> = {
   ORDEN_CREADA: 'Creó una orden', ORDEN_ASIGNADA: 'Asignó lavador', ORDEN_ESTADO: 'Cambió el estado', ORDEN_CANCELADA: 'Canceló una orden',
   CLIENTE_COMPLETADO: 'Completó datos de cliente de afán', CLIENTE_UNIDO: 'Unió cliente de afán con uno existente',
-  COBRO_EDITADO: 'Corrigió un cobro', COBRO_CONJUNTO: 'Cobró varias motos juntas', PLAN_CREADO: 'Creó un plan de membresía', PLAN_EDITADO: 'Cambió un plan de membresía', MEMBRESIA_VENDIDA: 'Vendió una membresía', INSUMO_CREADO: 'Creó un insumo', INSUMO_EDITADO: 'Cambió un insumo', INSUMO_COMPRA: 'Registró una compra de insumos', INSUMO_CONTEO: 'Contó un insumo', GASTO_REGISTRADO: 'Registró un gasto por fuera de la caja', GASTO_BORRADO: 'Borró un gasto por fuera de la caja', CLIENTE_CONTACTADO: 'Le escribió a un cliente para que vuelva',
+  COBRO_EDITADO: 'Corrigió un cobro', PAGINA_EDITADA: 'Editó la página pública', OPINION_PUBLICADA: 'Publicó una opinión', OPINION_OCULTA: 'Ocultó una opinión', OPINION_PENDIENTE: 'Devolvió una opinión a revisión', COBRO_CONJUNTO: 'Cobró varias motos juntas', PLAN_CREADO: 'Creó un plan de membresía', PLAN_EDITADO: 'Cambió un plan de membresía', MEMBRESIA_VENDIDA: 'Vendió una membresía', INSUMO_CREADO: 'Creó un insumo', INSUMO_EDITADO: 'Cambió un insumo', INSUMO_COMPRA: 'Registró una compra de insumos', INSUMO_CONTEO: 'Contó un insumo', GASTO_REGISTRADO: 'Registró un gasto por fuera de la caja', GASTO_BORRADO: 'Borró un gasto por fuera de la caja', CLIENTE_CONTACTADO: 'Le escribió a un cliente para que vuelva',
   NOMINA_PAGADA: 'Registró un pago de nómina', NOMINA_DESHECHA: 'Deshizo un pago de nómina', ACUERDO_CREADO: 'Creó un acuerdo de mínimo', ACUERDO_EDITADO: 'Cambió un acuerdo de mínimo',
   ADICIONAL_AGREGADO: 'Agregó un adicional', ADICIONAL_QUITADO: 'Quitó un adicional', COBRO: 'Registró un cobro',
   ANULACION_SOLICITADA: 'Pidió anular un cobro', COBRO_ANULADO: 'Anuló un cobro', ANULACION_RECHAZADA: 'Rechazó una anulación',
@@ -118,6 +118,44 @@ const ACTIONS: Record<string, string> = {
               </table>
             </div>
             <p class="chico suave">El cambio de precio aplica a las órdenes nuevas; las que ya están abiertas conservan el valor con el que se crearon.</p>
+          </section>
+
+          <section class="card col">
+            <h2>Página pública</h2>
+            <p class="chico suave">Lo que ve cualquier persona en <a [href]="origin" target="_blank" rel="noopener">{{ originLabel }}</a>. Las secciones sin datos no se muestran.</p>
+            <div class="grid">
+              <div><label for="pg-wa">WhatsApp del negocio</label><input id="pg-wa" class="campo" type="tel" inputmode="numeric" placeholder="3001234567" [(ngModel)]="pWhatsapp" /></div>
+              <div><label for="pg-ig">Usuario de Instagram</label><input id="pg-ig" class="campo" placeholder="columbiashine" autocapitalize="none" [(ngModel)]="pInstagram" /></div>
+              <div><label for="pg-dir">Dirección</label><input id="pg-dir" class="campo" placeholder="Calle 00 # 00-00, barrio" [(ngModel)]="pAddress" /></div>
+              <div><label for="pg-map">Enlace de Google Maps (opcional)</label><input id="pg-map" class="campo" placeholder="https://maps.app.goo.gl/…" [(ngModel)]="pMaps" /></div>
+              <div><label for="pg-gr">Enlace para calificar en Google (opcional)</label><input id="pg-gr" class="campo" placeholder="https://g.page/r/…" [(ngModel)]="pGoogle" /></div>
+            </div>
+            <div><label for="pg-sobre">Sobre nosotros (opcional; si lo dejas vacío sale un texto por defecto)</label><textarea id="pg-sobre" class="campo" rows="3" [(ngModel)]="pAbout"></textarea></div>
+            <div>
+              <label for="pg-posts">Publicaciones de Instagram para mostrar (un enlace por línea, máximo 12)</label>
+              <textarea id="pg-posts" class="campo" rows="4" placeholder="https://www.instagram.com/p/XXXXXXXX/" [(ngModel)]="pPosts"></textarea>
+              <p class="chico suave">En Instagram abre la publicación, toca "…" y "Copiar enlace". Funciona con publicaciones y reels de una cuenta pública.</p>
+            </div>
+            <button class="btn primario" style="align-self: flex-start" (click)="saveSite()">Guardar página</button>
+
+            <div class="sep col">
+              <p class="rotulo">Opiniones de clientes</p>
+              @for (r of reviews(); track r.id) {
+                <div class="tile col" style="gap: 6px">
+                  <div class="row between">
+                    <span><span class="amarillo">{{ '★'.repeat(r.rating) }}</span> <span class="fuerte">{{ r.name }}</span> <span class="chico suave">· {{ r.created_at | cuando: 'fecha' }}</span></span>
+                    <span class="etiqueta" [class.amarilla]="r.status === 'PENDIENTE'" [class.azul]="r.status === 'PUBLICADA'">{{ reviewStatus[r.status] }}</span>
+                  </div>
+                  <div>{{ r.comment }}</div>
+                  <div class="row">
+                    @if (r.status !== 'PUBLICADA') { <button class="btn chico primario" (click)="setReview(r, 'PUBLICADA')">Publicar</button> }
+                    @if (r.status !== 'OCULTA') { <button class="btn chico" (click)="setReview(r, 'OCULTA')">Ocultar</button> }
+                  </div>
+                </div>
+              } @empty {
+                <p class="chico suave">Todavía no hay opiniones. Compártele a tus clientes el enlace de la página para que te califiquen.</p>
+              }
+            </div>
           </section>
 
           <section class="card col">
@@ -239,6 +277,47 @@ export class Ajustes {
     this.load();
   }
 
+  // ---- Página pública ----
+  protected origin = location.origin + '/';
+  protected originLabel = location.host;
+  protected reviewStatus: Record<string, string> = { PENDIENTE: 'Por revisar', PUBLICADA: 'Publicada', OCULTA: 'Oculta' };
+  protected reviews = signal<any[]>([]);
+  protected pWhatsapp = signal('');
+  protected pInstagram = signal('');
+  protected pAddress = signal('');
+  protected pMaps = signal('');
+  protected pGoogle = signal('');
+  protected pAbout = signal('');
+  protected pPosts = signal('');
+
+  private loadSite() {
+    this.api.get('/site-admin').then((d) => {
+      const s = d.site;
+      this.pWhatsapp.set(s.whatsapp);
+      this.pInstagram.set(s.instagram);
+      this.pAddress.set(s.address);
+      this.pMaps.set(s.mapsUrl);
+      this.pGoogle.set(s.googleReviewsUrl);
+      this.pAbout.set(s.about);
+      this.pPosts.set((s.instagramPosts ?? []).join(String.fromCharCode(10)));
+      this.reviews.set(d.reviews);
+    }, this.toast.fail);
+  }
+
+  saveSite() {
+    this.run(
+      () => this.api.put('/site-admin', {
+        whatsapp: this.pWhatsapp(), instagram: this.pInstagram(), address: this.pAddress(), mapsUrl: this.pMaps(),
+        googleReviewsUrl: this.pGoogle(), about: this.pAbout(), instagramPosts: this.pPosts().split(String.fromCharCode(10)),
+      }),
+      'Página guardada.',
+    );
+  }
+
+  setReview(r: any, status: string) {
+    this.run(() => this.api.patch('/reviews/' + r.id, { status }), status === 'PUBLICADA' ? 'Opinión publicada.' : 'Opinión oculta.');
+  }
+
   // ---- Membresías ----
   protected plans = signal<any[]>([]);
   protected planName = signal('');
@@ -275,6 +354,7 @@ export class Ajustes {
         this.api.get('/users'), this.api.get('/services'), this.api.get('/audit'), this.api.get('/membership-plans'),
       ]);
       this.plans.set(plans);
+      this.loadSite();
       this.users.set(users);
       this.services.set(services);
       this.audit.set(audit);

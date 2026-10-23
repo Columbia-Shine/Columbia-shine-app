@@ -21,7 +21,7 @@ const COLUMNS = [
           <div class="lema">Pasión por tu máquina.</div>
         </div>
         <div class="hora">{{ clock() }}</div>
-        <a class="salir" routerLink="/" aria-label="Salir de la pantalla">Salir</a>
+        <a class="salir" routerLink="/inicio" aria-label="Salir de la pantalla">Salir</a>
       </header>
       <div class="columnas">
         @for (c of columns(); track c.status) {

@@ -2,7 +2,7 @@ import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
-import { ROLE_NAMES, Session, Toast } from './core';
+import { homeFor, ROLE_NAMES, Session, Toast } from './core';
 
 @Component({
   selector: 'app-root',
@@ -11,10 +11,10 @@ import { ROLE_NAMES, Session, Toast } from './core';
     @if (session.user(); as u) {
       @if (!kiosk()) {
       <header class="barra-superior">
-        <a routerLink="/" aria-label="Inicio"><img src="logo.png" alt="Columbia Shine" width="52" height="50" /></a>
+        <a [routerLink]="home()" aria-label="Inicio"><img src="logo.png" alt="Columbia Shine" width="52" height="50" /></a>
         <nav aria-label="Principal">
           @for (l of links(); track l.path) {
-            <a [routerLink]="l.path" routerLinkActive="activo" [routerLinkActiveOptions]="{ exact: l.path === '/' }">{{ l.label }}</a>
+            <a [routerLink]="l.path" routerLinkActive="activo" [routerLinkActiveOptions]="{ exact: l.path === '/inicio' }">{{ l.label }}</a>
           }
         </nav>
         <div class="quien">
@@ -47,16 +47,25 @@ export class App {
   private router = inject(Router);
   /** En la pantalla del local no se muestra el menú */
   protected kiosk = toSignal(
-    this.router.events.pipe(filter((e) => e instanceof NavigationEnd), map((e) => (e as NavigationEnd).urlAfterRedirects.startsWith('/pantalla'))),
+    this.router.events.pipe(filter((e) => e instanceof NavigationEnd), map((e) => {
+        // Sin menú en la pantalla del local y en la página pública
+        const url = (e as NavigationEnd).urlAfterRedirects.split(/[?#]/)[0];
+        return url === '/' || url.startsWith('/pantalla');
+      })),
     { initialValue: false },
   );
   protected roles = ROLE_NAMES;
+
+  protected home = computed(() => {
+    const u = this.session.user();
+    return u ? homeFor(u.role) : '/';
+  });
 
   protected links = computed(() => {
     const role = this.session.user()?.role;
     if (role !== 'OWNER' && role !== 'ADMIN') return [];
     const base = [
-      { path: '/', label: 'Inicio' },
+      { path: '/inicio', label: 'Inicio' },
       { path: '/recepcion', label: 'Recepción' },
       { path: '/ordenes', label: 'Órdenes' },
       { path: '/facturar', label: 'Facturar' },
