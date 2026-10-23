@@ -103,33 +103,6 @@ const FAQ = [
             </article>
           }
         </div>
-        @if (bases().length > 1) {
-          <details class="comparar">
-            <summary>Comparar servicios</summary>
-            <div class="tabla-caja">
-              <table>
-                <thead><tr><th></th>@for (s of bases(); track s.id) { <th>{{ s.name }}</th> }</tr></thead>
-                <tbody>
-                  <tr><td>Precio</td>@for (s of bases(); track s.id) { <td class="fuerte amarillo">{{ s.price | money }}</td> }</tr>
-                  <tr><td>Tiempo</td>@for (s of bases(); track s.id) { <td>{{ s.min_minutes }}–{{ s.max_minutes }} min</td> }</tr>
-                  <tr><td>Ideal para</td>@for (s of bases(); track s.id) { <td>{{ s.focus }}</td> }</tr>
-                  @for (step of allSteps(); track step) {
-                    <tr><td>{{ step }}</td>@for (s of bases(); track s.id) { <td class="marca-celda">{{ s.steps?.includes(step) ? '✓' : '—' }}</td> }</tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          </details>
-        }
-        @if (extras().length) {
-          <h3 style="margin-top: 28px">Adicionales</h3>
-          <div class="adicionales">
-            @for (e of extras(); track e.id) {
-              <span class="pastilla">{{ e.name }} · {{ e.price_from ? 'desde ' : '' }}{{ e.price | money }}</span>
-            }
-          </div>
-          <p class="chico suave">Los adicionales "desde" dependen del estado de la moto: te confirmamos el valor antes de hacerlos.</p>
-        }
       </section>
 
       @if (beforeAfter().length) {
@@ -376,12 +349,6 @@ const FAQ = [
     .promo p { margin: 0; color: var(--texto-suave); }
     .promo .etiqueta { align-self: flex-start; }
 
-    .comparar { margin-top: 18px; border: 1px solid var(--gris-oscuro); border-radius: var(--radio); padding: 4px 18px; background: var(--panel); }
-    .comparar summary { min-height: 52px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
-    .comparar table { min-width: 640px; }
-    .comparar td, .comparar th { text-align: center; }
-    .comparar td:first-child, .comparar th:first-child { text-align: left; color: var(--texto-suave); }
-    .marca-celda { color: var(--aqua); font-weight: 800; }
 
     .galeria { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
     .empresas { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
@@ -422,7 +389,6 @@ const FAQ = [
     .precio { font-size: 34px; font-weight: 800; color: var(--amarillo); }
     .pasos { margin: 6px 0 10px; padding-left: 18px; color: var(--texto-suave); font-size: 14px; flex: 1; }
     .ahorro { color: var(--aqua); font-weight: 700; }
-    .adicionales { display: flex; flex-wrap: wrap; gap: 8px; }
 
     .pasos-trabajo { list-style: none; counter-reset: paso; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 0; margin: 0; }
     .pasos-trabajo li { counter-increment: paso; display: flex; flex-direction: column; gap: 6px; padding: 20px; border-radius: var(--radio); background: var(--panel); border: 1px solid var(--gris-oscuro); }
@@ -497,15 +463,12 @@ export class Landing {
   protected beforeAfter = computed(() => this.images().filter((i: any) => i.kind === 'ANTES_DESPUES' && i.before));
   protected team = computed(() => this.images().filter((i: any) => i.kind === 'EQUIPO'));
   protected cover = computed(() => this.images().find((i: any) => i.kind === 'PORTADA') ?? null);
-  /** Todos los pasos de los servicios, en orden de aparición, para el comparador */
-  protected allSteps = computed(() => [...new Set(this.bases().flatMap((s: any) => s.steps ?? []))] as string[]);
   protected businessLink = computed(() => {
     const w = this.site()?.whatsapp;
     return w ? `https://wa.me/57${w}?text=${encodeURIComponent('Hola Columbia Shine, quiero cotizar un plan de lavado para mi flota de motos.')}` : null;
   });
   dayName = (d: string) => new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(d + 'T12:00:00Z'));
   protected bases = computed(() => (this.site()?.services ?? []).filter((s: any) => s.kind === 'BASE'));
-  protected extras = computed(() => (this.site()?.services ?? []).filter((s: any) => s.kind === 'EXTRA'));
   protected whatsapp = computed(() => {
     const w = this.site()?.whatsapp;
     return w ? `https://wa.me/57${w}?text=${encodeURIComponent('Hola Columbia Shine, quiero agendar un lavado para mi moto.')}` : null;

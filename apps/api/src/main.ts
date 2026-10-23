@@ -59,7 +59,7 @@ async function seoHead(origin: string): Promise<string> {
     hasOfferCatalog: {
       '@type': 'OfferCatalog',
       name: 'Servicios de lavado de motos',
-      itemListElement: services.map((x) => ({
+      itemListElement: services.filter((x) => x.kind === 'BASE').map((x) => ({
         '@type': 'Offer', price: x.price, priceCurrency: 'COP',
         itemOffered: { '@type': 'Service', name: x.name, ...(x.focus ? { description: x.focus } : {}) },
       })),
