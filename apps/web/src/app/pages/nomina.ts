@@ -32,7 +32,7 @@ import { Api, bogotaDay, dayLabel, METHOD_NAMES, MoneyInput, MoneyPipe, ROLE_NAM
               <div class="fila sep"><span class="fuerte">Pagado</span><span class="total">{{ d.total | money }}</span></div>
               @if (d.paid_cash || d.paid_other) {
                 <p class="chico suave">
-                  @if (d.paid_cash) { Efectivo de la caja {{ d.paid_cash | money }} (retiro) }
+                  @if (d.paid_cash) { Efectivo {{ d.paid_cash | money }} {{ d.cash_movement_id ? "(retiro de la caja)" : "(por fuera de la caja)" }} }
                   @if (d.paid_cash && d.paid_other) { · }
                   @if (d.paid_other) { {{ methods[d.other_method] || 'Por fuera de la caja' }} {{ d.paid_other | money }} }
                 </p>
@@ -58,19 +58,33 @@ import { Api, bogotaDay, dayLabel, METHOD_NAMES, MoneyInput, MoneyPipe, ROLE_NAM
               <div class="fila sep"><span class="fuerte">Total a pagar</span><span class="total">{{ total(p) | money }}</span></div>
               @if (total(p)) {
                 <div class="col" style="gap: 8px">
-                  <div>
-                    <label [for]="'ef-' + p.id">Efectivo de la caja (queda como retiro)</label>
-                    <input [id]="'ef-' + p.id" class="campo" dinero [ngModel]="cashOf(p)" (ngModelChange)="setCash(p.id, $event)" />
+                  <p class="rotulo">¿Cómo le pagas?</p>
+                  <div class="row" style="gap: 6px">
+                    <button class="pastilla" [attr.aria-pressed]="modeOf(p.id) === 'EFECTIVO'" (click)="setMode(p.id, 'EFECTIVO')">Efectivo</button>
+                    <button class="pastilla" [attr.aria-pressed]="modeOf(p.id) === 'OTRO'" (click)="setMode(p.id, 'OTRO')">{{ methods[methodOf(p.id)] }}</button>
+                    <button class="pastilla" [attr.aria-pressed]="modeOf(p.id) === 'MIXTO'" (click)="setMode(p.id, 'MIXTO')">Efectivo + {{ methods[methodOf(p.id)] }}</button>
                   </div>
-                  @if (otherOf(p) > 0) {
+                  @if (modeOf(p.id) === 'MIXTO') {
                     <div>
-                      <label [for]="'om-' + p.id">El resto ({{ otherOf(p) | money }}) se lo pagaste por</label>
-                      <select [id]="'om-' + p.id" class="campo" [ngModel]="methodOf(p.id)" (ngModelChange)="setMethod(p.id, $event)">
-                        <option value="">Elegir…</option>
+                      <label [for]="'ef-' + p.id">¿Cuánto en efectivo?</label>
+                      <input [id]="'ef-' + p.id" class="campo" dinero [ngModel]="cash()[p.id] ?? null" (ngModelChange)="setCash(p.id, $event)" />
+                    </div>
+                  }
+                  @if (modeOf(p.id) !== 'EFECTIVO') {
+                    <div class="row chico" style="gap: 8px">
+                      <label [for]="'om-' + p.id" style="margin: 0">Por</label>
+                      <select [id]="'om-' + p.id" class="campo" style="width: 170px; min-height: 40px" [ngModel]="methodOf(p.id)" (ngModelChange)="setMethod(p.id, $event)">
                         @for (m of outMethods; track m) { <option [value]="m">{{ methods[m] }}</option> }
                       </select>
                     </div>
                   }
+                  <div class="tile chico">
+                    @if (cashOf(p) > 0) { <div class="row between"><span>Efectivo</span><span class="fuerte">{{ cashOf(p) | money }}</span></div> }
+                    @if (otherOf(p) > 0) { <div class="row between"><span>{{ methods[methodOf(p.id)] }}</span><span class="fuerte">{{ otherOf(p) | money }}</span></div> }
+                    @if (cashOf(p) > 0) {
+                      <div class="suave" style="margin-top: 4px">{{ shiftOpen() ? 'El efectivo sale de la caja: queda como retiro del turno.' : 'No hay turno de caja abierto: el efectivo queda como pagado por fuera de la caja.' }}</div>
+                    }
+                  </div>
                 </div>
               }
               <button class="btn primario" [disabled]="busy() || !total(p)" (click)="pay(p)">Registrar pago {{ total(p) | money }}</button>
@@ -161,9 +175,21 @@ export class Nomina {
   protected methods = METHOD_NAMES;
   protected outMethods = ['NEQUI', 'DAVIPLATA', 'TRANSFERENCIA'];
   /** Cuánto se paga en efectivo de la caja por persona (por defecto, todo) y por qué medio el resto */
-  private cash = signal<Record<string, number | null>>({});
+  protected cash = signal<Record<string, number | null>>({});
   private method = signal<Record<string, string>>({});
-  cashOf = (p: any): number => Math.min(this.cash()[p.id] ?? this.total(p), this.total(p));
+  /** Cómo se le paga a cada persona: todo en efectivo, todo por Nequi (u otro medio) o mezclado */
+  private mode = signal<Record<string, 'EFECTIVO' | 'OTRO' | 'MIXTO'>>({});
+  protected shiftOpen = signal(false);
+  modeOf = (id: string) => this.mode()[id] ?? 'EFECTIVO';
+  setMode(id: string, m: 'EFECTIVO' | 'OTRO' | 'MIXTO') {
+    this.mode.update((c) => ({ ...c, [id]: m }));
+  }
+  cashOf = (p: any): number => {
+    const m = this.modeOf(p.id);
+    if (m === 'EFECTIVO') return this.total(p);
+    if (m === 'OTRO') return 0;
+    return Math.min(Math.max(Number(this.cash()[p.id]) || 0, 0), this.total(p));
+  };
   otherOf = (p: any): number => this.total(p) - this.cashOf(p);
   methodOf = (id: string): string => this.method()[id] ?? 'NEQUI';
   setCash(id: string, v: number | null) {
@@ -209,6 +235,7 @@ export class Nomina {
     this.api.get('/payroll?day=' + day).then((d) => {
       if (this.day() !== day) return;
       this.pct.set(d.pct);
+      this.shiftOpen.set(!!d.shiftOpen);
       this.people.set(d.people);
     }, this.toast.fail);
   }
@@ -245,7 +272,7 @@ export class Nomina {
     if (other > 0 && !this.methodOf(p.id)) return this.toast.show('Elige por qué medio le pagaste el resto.', true);
     this.run(
       () => this.api.post('/payroll/pay', { userId: p.id, day: this.day(), worked: !!this.worked()[p.id], cash, otherMethod: other > 0 ? this.methodOf(p.id) : null }),
-      cash > 0 ? `Pago de ${p.name} registrado. El retiro de ${this.money(cash)} quedó en la caja.` : `Pago de ${p.name} registrado.`,
+      cash > 0 && this.shiftOpen() ? `Pago de ${p.name} registrado. El retiro de ${this.money(cash)} quedó en la caja.` : `Pago de ${p.name} registrado.`,
     );
   }
 

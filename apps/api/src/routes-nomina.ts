@@ -77,7 +77,7 @@ async function dayFigures(day: string, db: Db = pool) {
 
 nomina.get('/payroll', auth('OWNER'), async (req, res) => {
   const day = DAY.test(String(req.query.day)) ? String(req.query.day) : await today();
-  res.json(await dayFigures(day));
+  res.json({ ...(await dayFigures(day)), shiftOpen: !!(await openShift()) });
 });
 
 nomina.post('/payroll/pay', auth('OWNER'), async (req, res) => {
@@ -102,9 +102,9 @@ nomina.post('/payroll/pay', auth('OWNER'), async (req, res) => {
     const otherMethod = other > 0 ? String(b.otherMethod ?? '') : null;
     need(!other || OUT_METHODS.includes(otherMethod!), 'Elige por qué medio pagaste el resto.');
     let movementId: string | null = null;
-    if (cash > 0) {
-      const shift = await openShift(c);
-      need(shift, 'Para pagar con efectivo de la caja, abre el turno de caja.');
+    // Con turno abierto el efectivo sale de la caja (retiro); sin turno, se pagó por fuera de la caja
+    const shift = cash > 0 ? await openShift(c) : null;
+    if (shift) {
       movementId = (
         await one(
           `insert into cash_movements (shift_id, kind, amount, description, category, created_by) values ($1, 'RETIRO', $2, $3, 'Nómina', $4) returning id`,
