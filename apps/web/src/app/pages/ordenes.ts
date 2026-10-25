@@ -46,6 +46,7 @@ const COLUMNS = ['WAITING', 'WASHING', 'READY'];
                       @switch (action(o)) {
                         @case ('assign') { <a class="btn chico" [routerLink]="['/ordenes', o.id]">Asignar</a> }
                         @case ('start') { <button class="btn chico" (click)="move(o, 'WASHING')">Iniciar</button> }
+                        @case ('finish') { <button class="btn chico primario" (click)="move(o, 'READY')">Lista</button> }
                         @case ('pay') { <a class="btn chico primario" [routerLink]="['/cobro', o.id]">Cobrar {{ o.total | money }}</a> }
                         @case ('deliver') { <button class="btn chico primario" (click)="move(o, 'DELIVERED')">Entregar</button> }
                         @default { <a class="btn chico" [routerLink]="['/ordenes', o.id]">Ver</a> }
@@ -139,6 +140,7 @@ export class Ordenes implements OnDestroy {
   action(o: any): string {
     if (o.status === 'WAITING') return o.washer_id ? 'start' : 'assign';
     if (o.status === 'READY') return o.payment_id ? 'deliver' : 'pay';
+    if (o.status === 'WASHING') return 'finish';
     return 'view';
   }
 
