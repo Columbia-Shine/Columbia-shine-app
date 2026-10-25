@@ -49,9 +49,9 @@ p { margin: 0; }
 
 .card { background: var(--panel); border: 1px solid var(--gris-oscuro); border-radius: var(--radio); padding: 20px; }
 .tile { background: var(--gris-oscuro); border-radius: 12px; padding: 14px 16px; }
-.kpi { background: var(--gris-oscuro); border-radius: var(--radio); padding: 18px; }
+.kpi { background: var(--gris-oscuro); border-radius: var(--radio); padding: 18px; min-width: 0; }
 .kpi.azul { background: var(--azul-oscuro); }
-.kpi .valor { margin-top: 4px; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .valor { margin-top: 4px; font-size: clamp(18px, 4.6vw, 30px); white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
 .kpi .nota, .kpi .rotulo { font-size: 13px; color: var(--texto-suave); }
 .kpi.azul .nota, .kpi.azul .rotulo { color: #dbeafe; }
 
@@ -98,7 +98,12 @@ label { display: block; font-size: 13px; color: var(--texto-suave); margin-botto
 .campo.grande { min-height: 64px; font-size: 26px; font-weight: 700; border: 2px solid var(--azul); }
 select.campo { appearance: auto; }
 
-.tabla-caja { overflow-x: auto; }
+.tabla-caja { overflow-x: auto; min-width: 0; }
+@media (max-width: 520px) {
+  .kpi { padding: 14px; }
+  .grid-sm { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+  .tile { padding: 12px; }
+}
 table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 th { padding: 8px 8px 8px 0; text-align: left; font-weight: 600; color: var(--texto-suave); white-space: nowrap; }
 td { padding: 12px 8px 12px 0; border-top: 1px solid var(--gris-medio); }
