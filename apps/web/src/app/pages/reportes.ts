@@ -43,6 +43,7 @@ import { Api, bogotaDay, dayLabel, METHOD_NAMES, MoneyPipe, Session, Toast, When
             <div class="kpi"><div class="rotulo">Lo que generé</div><div class="valor">{{ m.totals.washed | money }}</div><div class="nota">Cobrado de las motos que lavé</div></div>
             <div class="kpi"><div class="rotulo">Mi comisión ({{ m.pct }}%)</div><div class="valor amarillo">{{ m.totals.commission | money }}</div></div>
             <div class="kpi"><div class="rotulo">Pagado por el dueño</div><div class="valor">{{ m.totals.paid | money }}</div><div class="nota">{{ m.totals.daysPaid }} día(s) · propinas {{ m.totals.tips | money }} · ajustes {{ m.totals.topup | money }}</div></div>
+            @if (m.loanBalance) { <div class="kpi"><div class="rotulo">Debo en préstamos</div><div class="valor">{{ m.loanBalance | money }}</div><div class="nota">Se descuenta de mis pagos</div></div> }
           </div>
           @if (m.guarantee; as g) {
             <p class="aviso chico">

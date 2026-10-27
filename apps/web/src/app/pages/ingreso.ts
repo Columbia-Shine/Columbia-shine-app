@@ -68,7 +68,7 @@ export class Ingreso {
         @if (register()) {
           <div>
             <label for="name">Tu nombre</label>
-            <input id="name" class="campo" name="name" autocomplete="name" required [(ngModel)]="name" />
+            <input id="name" class="campo" autocapitalize="words" name="name" autocomplete="name" required [(ngModel)]="name" />
           </div>
           <div>
             <label for="user">Usuario (con este entras)</label>

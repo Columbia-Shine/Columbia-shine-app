@@ -59,7 +59,7 @@ const PERMISSIONS: [string, string, string, string][] = [
 
           <section class="card col">
             <h2>Crear usuario</h2>
-            <div><label for="un">Nombre</label><input id="un" class="campo" [(ngModel)]="name" autocomplete="off" /></div>
+            <div><label for="un">Nombre</label><input id="un" class="campo" autocapitalize="words" [(ngModel)]="name" autocomplete="off" /></div>
             <div class="row">
               <button class="pastilla" [attr.aria-pressed]="role() === 'WASHER'" (click)="role.set('WASHER')">Lavador</button>
               <button class="pastilla" [attr.aria-pressed]="role() === 'ADMIN'" (click)="role.set('ADMIN')">Administrador de turno</button>

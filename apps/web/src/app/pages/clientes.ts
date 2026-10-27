@@ -170,7 +170,7 @@ export class Clientes {
         @if (editing()) {
           <section class="card col">
             <div class="grid">
-              <div><label for="n">Nombre</label><input id="n" class="campo" [(ngModel)]="name" /></div>
+              <div><label for="n">Nombre</label><input id="n" class="campo" autocapitalize="words" [(ngModel)]="name" /></div>
               <div><label for="p">Celular</label><input id="p" class="campo" type="tel" [(ngModel)]="phone" /></div>
               <div><label for="e">Correo</label><input id="e" class="campo" type="email" [(ngModel)]="email" /></div>
               <div><label for="d">Documento</label><input id="d" class="campo" [(ngModel)]="document" /></div>

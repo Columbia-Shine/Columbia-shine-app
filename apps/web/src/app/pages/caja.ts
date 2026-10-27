@@ -86,13 +86,29 @@ import { Api, EXPENSE_CATEGORIES, METHOD_NAMES, MoneyInput, MoneyPipe, Session, 
                 </select>
               }
               @if (movKind() === 'RETIRO') {
-                <p class="chico suave">Para pagarle a un lavador usa Nómina: allí el retiro queda solo.</p>
+                <p class="chico suave">Para pagarle a un lavador usa Nómina: allí el retiro queda solo. Si le prestas plata, usa "Préstamo".</p>
               }
-              <div class="row">
-                <input class="campo" style="width: 140px" dinero placeholder="Valor" aria-label="Valor" [(ngModel)]="movAmount" />
-                <input class="campo grow" style="flex-basis: 160px" placeholder="¿En qué?" aria-label="Descripción" [(ngModel)]="movText" />
-              </div>
-              <button class="btn" [disabled]="busy()" (click)="addMovement()">Guardar movimiento</button>
+              @if (movKind() === 'PRESTAMO') {
+                <select class="campo" aria-label="A quién le prestas" [(ngModel)]="loanUser">
+                  <option value="">¿A quién le prestas?</option>
+                  @for (u of loanPeople(); track u.id) { <option [value]="u.id">{{ u.name }}</option> }
+                </select>
+                <div class="row" style="gap: 6px">
+                  <button class="pastilla" [attr.aria-pressed]="loanMode() === 'DIA'" (click)="loanMode.set('DIA')">Se descuenta del pago de hoy</button>
+                  <button class="pastilla" [attr.aria-pressed]="loanMode() === 'DESPUES'" (click)="loanMode.set('DESPUES')">Lo paga después</button>
+                </div>
+                <div class="row">
+                  <input class="campo" style="width: 140px" dinero placeholder="Valor" aria-label="Valor del préstamo" [(ngModel)]="movAmount" />
+                  <input class="campo grow" style="flex-basis: 160px" placeholder="Nota (opcional)" aria-label="Nota del préstamo" [(ngModel)]="movText" />
+                </div>
+                <button class="btn" [disabled]="busy()" (click)="addLoan()">Registrar préstamo</button>
+              } @else {
+                <div class="row">
+                  <input class="campo" style="width: 140px" dinero placeholder="Valor" aria-label="Valor" [(ngModel)]="movAmount" />
+                  <input class="campo grow" style="flex-basis: 160px" placeholder="¿En qué?" aria-label="Descripción" [(ngModel)]="movText" />
+                </div>
+                <button class="btn" [disabled]="busy()" (click)="addMovement()">Guardar movimiento</button>
+              }
               @for (m of s.movements; track m.id) {
                 <div class="row between chico"><span>{{ m.created_at | cuando }} · @if (m.category) { <span class="etiqueta">{{ m.category }}</span> } {{ m.description }} <span class="suave">({{ m.user_name }})</span></span><span>{{ m.kind === 'ENTRADA' ? '+' : '−' }} {{ m.amount | money }}</span></div>
               }
@@ -234,7 +250,11 @@ export class Caja {
     { id: 'GASTO', label: 'Gasto' },
     { id: 'RETIRO', label: 'Retiro' },
     { id: 'ENTRADA', label: 'Entrada' },
+    { id: 'PRESTAMO', label: 'Préstamo' },
   ];
+  protected loanPeople = signal<any[]>([]);
+  protected loanUser = signal('');
+  protected loanMode = signal<'DIA' | 'DESPUES'>('DIA');
   protected abs = Math.abs;
   protected loading = signal(true);
   protected busy = signal(false);
@@ -276,6 +296,7 @@ export class Caja {
 
   constructor() {
     this.load();
+    this.api.get('/loans/people').then((p) => this.loanPeople.set(p), this.toast.fail);
   }
 
   private async load() {
@@ -315,6 +336,17 @@ export class Caja {
       this.movCategory.set('');
       this.movText.set('');
     }, 'Movimiento guardado.');
+  }
+
+  addLoan() {
+    if (!this.loanUser()) return this.toast.show('Elige a quién le prestas.', true);
+    if (!this.movAmount()) return this.toast.show('Escribe el valor del préstamo.', true);
+    this.run(async () => {
+      await this.api.post('/loans', { userId: this.loanUser(), amount: Number(this.movAmount()), mode: this.loanMode(), source: 'CAJA', note: this.movText() });
+      this.movAmount.set(null);
+      this.movText.set('');
+      this.loanUser.set('');
+    }, this.loanMode() === 'DIA' ? 'Préstamo registrado. Se descuenta en su pago de hoy.' : 'Préstamo registrado. Queda debiendo.');
   }
 
   requestVoid(p: any) {

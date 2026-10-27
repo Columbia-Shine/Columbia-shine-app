@@ -265,7 +265,7 @@ export class Agendar extends Booker {
         <section class="card side col" style="flex-basis: 400px">
           <h2>Agendar a un cliente</h2>
           <div class="row">
-            <div class="grow" style="flex-basis: 160px"><label for="cn">Nombre</label><input id="cn" class="campo" [(ngModel)]="customerName" autocomplete="off" /></div>
+            <div class="grow" style="flex-basis: 160px"><label for="cn">Nombre</label><input id="cn" class="campo" autocapitalize="words" [(ngModel)]="customerName" autocomplete="off" /></div>
             <div class="grow" style="flex-basis: 140px"><label for="cp">Celular</label><input id="cp" class="campo" type="tel" inputmode="numeric" [(ngModel)]="customerPhone" autocomplete="off" /></div>
           </div>
           <div>

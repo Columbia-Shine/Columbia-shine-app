@@ -27,7 +27,7 @@ apps/web/            Angular 21, componentes standalone, sin zone.js (todo el es
   src/app/app.routes.ts    Rutas con carga diferida y guardas por rol
   src/app/pages/*.ts Una página por archivo (plantilla y estilos dentro del mismo archivo)
   src/styles.css     Colores de marca y clases globales (.card, .btn, .opcion, .pastilla, .kpi, .campo…)
-db/migrations/       SQL numerado (001_inicial.sql … 018_fotos_pagina.sql). Se aplica solo al arrancar la API
+db/migrations/       SQL numerado (001_inicial.sql … 019_prestamos.sql). Se aplica solo al arrancar la API
 railway.json         build: npm run build · start: npm start · healthcheck: /api/health
 docker-compose.yml   PostgreSQL 17 local en el puerto 5433 (base columbia_shine, usuario y clave postgres)
 ```
@@ -72,6 +72,7 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - El usuario (`users.username`) es único en minúsculas: 3 a 30 caracteres `a-z 0-9 . _ -`. Lo valida `username()` de `auth.ts`.
 - Contraseña mínima: 8 caracteres para el equipo, 6 para clientes. El propietario crea al equipo y le cambia usuario o contraseña en Ajustes.
 - El registro de clientes pide nombre, usuario, celular (para contactarlo) y correo opcional.
+- Los campos de nombre de personas llevan `autocapitalize="words"` (el teclado del celular pone mayúscula en cada palabra).
 - El PIN ya no se usa (la columna `pin_hash` quedó sin uso).
 - Bloqueo de 15 minutos tras 5 intentos fallidos.
 
@@ -143,6 +144,14 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Al registrar el pago se elige **cómo se le paga**: Efectivo, Nequi (u otro medio) o Efectivo + Nequi (con cuánto en efectivo). El efectivo sale de la caja si hay turno abierto (se crea solo un RETIRO con categoría "Nómina", `payroll_days.cash_movement_id`); sin turno abierto queda como pagado por fuera de la caja. Lo demás va en `paid_other` / `other_method`. Deshacer borra el retiro si su turno sigue abierto. En el cierre, lo pagado por Nequi u otro medio se muestra aparte (`payrollOut`): ahí solo se confirma lo que entró de clientes.
 - La sección "Acuerdos de mínimo" lleva el control: días pagados, comisiones, ajustes que puso el dueño y total pagado.
 - **Mi mes** (`GET /my-month`, ADMIN y WASHER): en Reportes del administrador (menú "Mi mes y hoy") ve sus motos lavadas del mes, lo que generó, su comisión, lo que el dueño le ha pagado (con propinas y ajustes) día por día y su acuerdo. Solo sus números; el reporte del negocio para él sigue siendo del día.
+
+## Préstamos al equipo
+
+- Tablas `loans` (persona, valor, `mode` DIA o DESPUES, `source` CAJA o FUERA) y `loan_payments` (abonos: NOMINA ligado a `payroll_day_id`, o EFECTIVO). Rutas en `routes-nomina.ts`.
+- Se registran desde Caja (pestaña "Préstamo" de Registrar movimiento; OWNER y ADMIN, siempre de la caja: queda RETIRO con categoría "Préstamo") o desde Nómina → Préstamos (solo OWNER; también "por fuera de la caja"). Solo a quien lava.
+- **Del día** (`DIA`): en la nómina se descuenta solo del pago de ese día o del siguiente que se registre. **Lo paga después** (`DESPUES`): queda debiendo; el dueño lo descuenta cuando quiera en el campo "Descontar de préstamos" del pago o registra un abono en efectivo (con turno abierto entra a la caja como ENTRADA "Préstamo").
+- `payroll_days.total` sigue siendo lo ganado y `payroll_days.loans` lo descontado: se le entregó `total − loans` (= `paid_cash + paid_other`). Deshacer el pago borra sus abonos (el préstamo vuelve a quedar pendiente).
+- Anular un préstamo (solo OWNER) solo si no tiene abonos; deshace el retiro si su turno sigue abierto. En "Mi mes" quien lava ve cuánto debe. Auditoría: PRESTAMO_REGISTRADO, PRESTAMO_ABONO, PRESTAMO_ANULADO.
 
 ## Gastos y cierre del mes
 

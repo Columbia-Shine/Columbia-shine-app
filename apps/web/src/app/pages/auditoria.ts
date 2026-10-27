@@ -13,7 +13,7 @@ export const ACTIONS: Record<string, string> = {
   TURNO_ABIERTO: 'Abrió turno', TURNO_CERRADO: 'Cerró turno', MOVIMIENTO_CAJA: 'Movimiento de caja',
   RESERVA_CREADA: 'Creó una reserva', RESERVA_CANCELADA: 'Canceló una reserva',
   USUARIO_CREADO: 'Creó un usuario', USUARIO_EDITADO: 'Editó un usuario', SERVICIO_EDITADO: 'Cambió un precio o servicio',
-  NOMINA_PAGADA: 'Registró un pago de nómina', NOMINA_DESHECHA: 'Deshizo un pago de nómina', ACUERDO_CREADO: 'Creó un acuerdo de mínimo', ACUERDO_EDITADO: 'Cambió un acuerdo de mínimo',
+  NOMINA_PAGADA: 'Registró un pago de nómina', NOMINA_DESHECHA: 'Deshizo un pago de nómina', ACUERDO_CREADO: 'Creó un acuerdo de mínimo', ACUERDO_EDITADO: 'Cambió un acuerdo de mínimo', PRESTAMO_REGISTRADO: 'Registró un préstamo', PRESTAMO_ABONO: 'Registró un abono a un préstamo', PRESTAMO_ANULADO: 'Anuló un préstamo',
   GASTO_REGISTRADO: 'Registró un gasto por fuera de la caja', GASTO_BORRADO: 'Borró un gasto por fuera de la caja',
   INSUMO_CREADO: 'Creó un insumo', INSUMO_EDITADO: 'Cambió un insumo', INSUMO_COMPRA: 'Registró una compra de insumos', INSUMO_CONTEO: 'Contó un insumo',
   PLAN_CREADO: 'Creó un plan de membresía', PLAN_EDITADO: 'Cambió un plan de membresía', MEMBRESIA_VENDIDA: 'Vendió una membresía',

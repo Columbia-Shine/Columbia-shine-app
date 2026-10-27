@@ -282,7 +282,7 @@ const FAQ = [
                   <button class="estrella" role="radio" [attr.aria-checked]="rating() === n" [attr.aria-label]="n + ' de 5'" [class.llena]="n <= rating()" (click)="rating.set(n)">★</button>
                 }
               </div>
-              <div><label for="op-nombre">Tu nombre</label><input id="op-nombre" class="campo" maxlength="60" [(ngModel)]="name" /></div>
+              <div><label for="op-nombre">Tu nombre</label><input id="op-nombre" class="campo" autocapitalize="words" maxlength="60" [(ngModel)]="name" /></div>
               <div><label for="op-texto">Tu comentario</label><textarea id="op-texto" class="campo" rows="3" maxlength="500" [(ngModel)]="comment"></textarea></div>
               <button class="btn primario" style="align-self: flex-start" [disabled]="busy()" (click)="sendReview()">Enviar opinión</button>
             }

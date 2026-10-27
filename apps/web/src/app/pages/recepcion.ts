@@ -47,7 +47,7 @@ const MAX_PHOTOS = 6;
               <div class="aviso col" style="gap: 10px">
                 <div><span class="fuerte amarillo">Cliente de afán:</span> esta placa no tiene los datos del cliente. Si ahora tiene tiempo, complétalos (opcional).</div>
                 <div class="grid">
-                  <div><label for="pn">Nombre del cliente</label><input id="pn" class="campo" [(ngModel)]="customerName" autocomplete="off" /></div>
+                  <div><label for="pn">Nombre del cliente</label><input id="pn" class="campo" autocapitalize="words" [(ngModel)]="customerName" autocomplete="off" /></div>
                   <div><label for="pp">Celular</label><input id="pp" class="campo" type="tel" inputmode="numeric" [(ngModel)]="customerPhone" autocomplete="off" /></div>
                 </div>
               </div>
@@ -87,7 +87,7 @@ const MAX_PHOTOS = 6;
               }
               <div class="grid">
                 @if (mode() === 'nuevo') {
-                  <div><label for="cn">Nombre del cliente</label><input id="cn" class="campo" [(ngModel)]="customerName" autocomplete="off" /></div>
+                  <div><label for="cn">Nombre del cliente</label><input id="cn" class="campo" autocapitalize="words" [(ngModel)]="customerName" autocomplete="off" /></div>
                   <div><label for="cp">Celular</label><input id="cp" class="campo" type="tel" inputmode="numeric" [(ngModel)]="customerPhone" autocomplete="off" /></div>
                 }
                 <div><label for="br">Marca{{ noPlate() ? ' (obligatoria)' : '' }}</label><input id="br" class="campo" [(ngModel)]="brand" /></div>
