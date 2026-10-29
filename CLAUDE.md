@@ -202,12 +202,12 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 
 ## Servicios (del manual interno)
 
-Precios vigentes en producción (octubre 2026). Las migraciones siembran los precios originales; en producción se cambian desde Ajustes. El costo directo de la tabla es el del manual; el estimado con los productos reales (oct. 2026: shampoo y desengrasante en garrafa de 20 L, ~48 ml de shampoo por moto, hidratador de motores ~17 ml) es Basic ~$200, Premium ~$1.700, Detail ~$2.300, Full ~$3.200.
+Precios vigentes en producción (octubre 2026). Las migraciones siembran los precios originales; en producción se cambian desde Ajustes. El costo directo de la tabla es el del manual; el estimado con los productos reales (oct. 2026: shampoo y desengrasante en garrafa de 20 L, ~48 ml de shampoo por moto, hidratador de motores ~17 ml) es Express ~$100, Basic ~$200, Premium ~$1.700, Detail ~$2.300, Full ~$3.200, y así quedó cargado en producción (28 oct. 2026).
 
 | Servicio | Precio | Tiempo objetivo | Costo directo |
 | --- | --- | --- | --- |
 | Shine Express (solo quitar barro: agua y trapo) | $10.000 | 10–15 min | $1.000 (estimado) |
-| Shine Basic | $16.000 | 20–25 min | $5.600 |
+| Shine Basic | $17.000 | 20–25 min | $5.600 |
 | Shine Premium | $26.000 | 30–40 min | $8.900 |
 | Shine Detail (recomendado) | $40.000 | 60–75 min | $17.100 |
 | Shine Full | $60.000 | 120–150 min | $30.200 |
