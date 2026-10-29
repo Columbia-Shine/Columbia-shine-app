@@ -77,9 +77,10 @@ const PERMISSIONS: [string, string, string, string][] = [
         <div class="main col" style="gap: 20px">
           <section class="card col">
             <h2>Servicios y precios</h2>
+            <p class="chico suave">Costo productos: lo que se gasta en productos por moto (sin la comisión del lavador). Con eso Reportes calcula cuánto deja cada servicio.</p>
             <div class="tabla-caja">
-              <table style="min-width: 520px">
-                <thead><tr><th>Servicio</th><th>Tipo</th><th class="der">Precio</th><th></th></tr></thead>
+              <table style="min-width: 660px">
+                <thead><tr><th>Servicio</th><th>Tipo</th><th class="der">Precio</th><th class="der">Costo productos</th><th></th></tr></thead>
                 <tbody>
                   @for (s of services(); track s.id) {
                     <tr [style.opacity]="s.active ? 1 : 0.55">
@@ -93,11 +94,18 @@ const PERMISSIONS: [string, string, string, string][] = [
                         }
                       </td>
                       <td class="der">
+                        @if (priceOf() === s.id) {
+                          <input class="campo" style="width: 120px; min-height: 44px" dinero [attr.aria-label]="'Costo de productos de ' + s.name" [(ngModel)]="newCost" />
+                        } @else {
+                          <span class="suave">{{ s.direct_cost === null ? '—' : (s.direct_cost | money) }}</span>
+                        }
+                      </td>
+                      <td class="der">
                         <span class="row" style="justify-content: flex-end; flex-wrap: nowrap">
                           @if (priceOf() === s.id) {
                             <button class="btn chico azul" (click)="savePrice(s)">Guardar</button>
                           } @else {
-                            <button class="btn chico" (click)="priceOf.set(s.id); newPrice.set(s.price)">Cambiar precio</button>
+                            <button class="btn chico" (click)="priceOf.set(s.id); newPrice.set(s.price); newCost.set(s.direct_cost)">Editar</button>
                           }
                           <button class="btn chico" (click)="toggleService(s)">{{ s.active ? 'Ocultar' : 'Mostrar' }}</button>
                         </span>
@@ -206,6 +214,7 @@ export class Ajustes {
   protected email = signal('');
   protected password = signal('');
   protected priceOf = signal('');
+  protected newCost = signal<number | null>(null);
   protected newPrice = signal<number | null>(null);
 
   constructor() {
@@ -297,9 +306,9 @@ export class Ajustes {
 
   savePrice(s: any) {
     this.run(async () => {
-      await this.api.patch('/services/' + s.id, { price: Number(this.newPrice()) });
+      await this.api.patch('/services/' + s.id, { price: Number(this.newPrice()), directCost: this.newCost() });
       this.priceOf.set('');
-    }, 'Precio actualizado.');
+    }, 'Servicio actualizado.');
   }
 
   toggleService(s: any) {

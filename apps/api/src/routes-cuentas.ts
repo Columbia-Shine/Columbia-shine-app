@@ -173,8 +173,13 @@ cuentas.patch('/services/:id', auth('OWNER'), async (req, res) => {
   need(s, 'Servicio no encontrado.', 404);
   const price = req.body?.price !== undefined ? int(req.body.price, 'El precio', 1) : s.price;
   const active = req.body?.active !== undefined ? !!req.body.active : s.active;
-  await q('update services set price = $2, active = $3 where id = $1', [s.id, price, active]);
-  await audit(req.user.id, 'SERVICIO_EDITADO', 'service', s.id, { nombre: s.name, antes: s.price, ahora: price, activo: active });
+  // Costo de productos por servicio (solo lo ve el dueño): para la ganancia por servicio en Reportes
+  const cost = req.body?.directCost !== undefined && req.body.directCost !== null ? int(req.body.directCost, 'El costo de productos') : s.direct_cost;
+  await q('update services set price = $2, active = $3, direct_cost = $4 where id = $1', [s.id, price, active, cost]);
+  await audit(req.user.id, 'SERVICIO_EDITADO', 'service', s.id, {
+    nombre: s.name, antes: s.price, ahora: price, activo: active,
+    ...(cost !== s.direct_cost ? { costo_antes: s.direct_cost, costo_ahora: cost } : {}),
+  });
   res.json({ ok: true });
 });
 

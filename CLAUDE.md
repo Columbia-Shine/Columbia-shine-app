@@ -195,14 +195,14 @@ En CI o sin terminal interactiva, compilar Angular con `CI=1` para que no pregun
 - Efectivo esperado = base + ventas y propinas en efectivo + entradas − gastos − retiros.
 - Al cerrar se cuenta el efectivo y además se **confirma cada medio que tuvo cobros en el turno** (Nequi, Daviplata, transferencia, datáfono) contra lo esperado (ventas + propinas de ese medio). Si solo hubo efectivo, solo se pide el efectivo. Se guarda en `shifts.method_counts`. Si cualquier medio no cuadra, la explicación es obligatoria.
 - Adicionales "desde" (óxido, desmanchado): se pueden cobrar por encima del precio base, nunca por debajo.
-- El costo directo de los servicios (`services.direct_cost`) solo lo ve el OWNER.
+- El costo directo de los servicios (`services.direct_cost`) solo lo ve el OWNER. Es el **costo de productos por moto** (sin la comisión) y se edita en Ajustes → Servicios y precios ("Editar"); Reportes lo usa para lo que deja cada servicio.
 - Toda acción sensible queda en `audit_log` con `audit()`.
 - Dinero en **pesos enteros** (int). Fechas en **hora de Bogotá**: usar `TODAY` y `localDate()` de `db.ts` en el backend y el pipe `cuando` en el frontend.
 - Fotos de recepción: se reducen en el navegador a JPEG de máximo 1280 px y se guardan en `order_photos` (bytea), máximo 6 por orden.
 
 ## Servicios (del manual interno)
 
-Precios vigentes en producción (octubre 2026). Las migraciones siembran los precios originales; en producción se cambian desde Ajustes.
+Precios vigentes en producción (octubre 2026). Las migraciones siembran los precios originales; en producción se cambian desde Ajustes. El costo directo de la tabla es el del manual; el estimado con los productos reales (oct. 2026: shampoo y desengrasante en garrafa de 20 L, ~48 ml de shampoo por moto, hidratador de motores ~17 ml) es Basic ~$200, Premium ~$1.700, Detail ~$2.300, Full ~$3.200.
 
 | Servicio | Precio | Tiempo objetivo | Costo directo |
 | --- | --- | --- | --- |
