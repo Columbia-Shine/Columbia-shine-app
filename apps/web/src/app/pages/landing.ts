@@ -493,9 +493,11 @@ export class Landing {
   });
 
   constructor() {
-    // Quien ya entró como equipo va a su pantalla de trabajo
+    // En la app instalada (ícono del celular), quien ya entró como equipo va a su pantalla de trabajo.
+    // En el navegador la página pública se ve siempre, aunque haya sesión (por ejemplo, en otra pestaña).
     const u = inject(Session).user();
-    if (u && u.role !== 'CLIENT') {
+    const installed = matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true;
+    if (installed && u && u.role !== 'CLIENT') {
       inject(Router).navigateByUrl(homeFor(u.role));
       return;
     }
