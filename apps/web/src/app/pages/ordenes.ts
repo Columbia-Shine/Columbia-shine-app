@@ -38,8 +38,13 @@ const COLUMNS = ['WAITING', 'WASHING', 'READY'];
                     <div class="chico">{{ o.brand }} {{ o.model }} · {{ o.customer_name }}</div>
                     <div class="servicio">{{ o.service_name }} @if (o.payment_id) { <span class="etiqueta aqua">Pagada</span> }</div>
                     @if (extras(o); as x) { <div class="chico suave">+ {{ x }}</div> }
-                    @if (o.status === 'READY' && whatsapp(o); as link) {
-                      <a class="chico" [href]="link" target="_blank" rel="noopener" (click)="notified(o)">{{ o.notified_at ? 'Avisado · avisar de nuevo' : 'Avisar por WhatsApp' }}</a>
+                    @if (o.status === 'READY') {
+                      @if (whatsapp(o); as link) {
+                        <a class="chico" [href]="link" target="_blank" rel="noopener" (click)="notified(o)">{{ o.notified_at ? 'Avisado · avisar de nuevo' : 'Avisar por WhatsApp' }}</a>
+                      } @else {
+                        <!-- Sin celular no hay a quién avisar: se completa en la ficha del cliente -->
+                        <a class="chico suave" [routerLink]="['/clientes', o.customer_id]">Sin celular para avisar · agregarlo</a>
+                      }
                     }
                     <div class="row between" style="margin-top: 4px">
                       <span class="chico suave">{{ o.washer_name || 'Sin asignar' }}</span>
