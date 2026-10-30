@@ -42,7 +42,7 @@ const POST_LINK = /^https:\/\/(www\.)?instagram\.com\/(p|reel)\/[\w-]+/;
               <h2>Publicaciones de Instagram</h2>
               <span class="chico suave">{{ posts().length }} de 12</span>
             </div>
-            <p class="chico suave">En Instagram abre la publicación o el reel, toca "…" y "Copiar enlace". Deben ser de una cuenta pública. Se muestran en este orden, en un carrusel.</p>
+            <p class="chico suave">En Instagram abre la publicación o el reel, toca "…" y "Copiar enlace". Deben ser de una cuenta pública. Se muestran en este orden, en un carrusel. Se publican apenas las agregas (no necesitas "Guardar cambios").</p>
             <div class="row">
               <input class="campo grow" style="flex-basis: 280px" placeholder="https://www.instagram.com/p/…" aria-label="Enlace de la publicación" [(ngModel)]="newPost" (keydown.enter)="addPost()" />
               <button class="btn primario" [disabled]="posts().length >= 12" (click)="addPost()">Agregar</button>
@@ -263,6 +263,7 @@ export class Pagina {
     if (this.posts().includes(link)) return this.toast.show('Esa publicación ya está.', true);
     this.posts.update((p) => [...p, link].slice(0, 12));
     this.newPost.set('');
+    this.save('Publicación agregada a la página.');
   }
 
   movePost(i: number, dir: number) {
@@ -271,13 +272,16 @@ export class Pagina {
       [next[i], next[i + dir]] = [next[i + dir], next[i]];
       return next;
     });
+    this.save('Orden guardado.');
   }
 
   removePost(i: number) {
     this.posts.update((p) => p.filter((_, j) => j !== i));
+    this.save('Publicación quitada de la página.');
   }
 
-  async save() {
+  /** Guarda todo el contenido; las publicaciones de Instagram lo llaman solas al agregar, mover o quitar. */
+  async save(done = 'Página guardada.') {
     this.busy.set(true);
     try {
       await this.api.put('/site-admin', {
@@ -285,7 +289,7 @@ export class Pagina {
         googleReviewsUrl: this.google(), about: this.about(), instagramPosts: this.posts(),
         promos: this.promos(), business: { show: this.businessShow(), text: this.businessText() },
       });
-      this.toast.show('Página guardada.');
+      this.toast.show(done);
     } catch (e) {
       this.toast.fail(e);
     } finally {
